@@ -13,7 +13,8 @@ This guiding question ensures that every analytical step contributes to understa
 ### Analysis Process Flow
 Below is a visual representation of the systematic approach taken in this analysis:
 
-<img width="1024" height="1365" alt="Process" src="https://github.com/user-attachments/assets/6cb7b6ef-21a8-474b-b38d-1fa23e117b0d" />
+<img width="1024" height="1536" alt="Process" src="https://github.com/user-attachments/assets/cb232be8-2926-4750-bdcf-b73d8b290735" />
+
 
 
 ## Data Preprocessing
