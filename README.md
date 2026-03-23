@@ -160,7 +160,8 @@ Based on the Elbow Method, **4** clusters were chosen. The resulting clusters ex
 #### Cluster Dashboard
 This dashboard provides an overview of the cluster sizes, CO2 distribution, and the relationship between power and mass within each cluster. It highlights how different clusters occupy different regions in the feature space and have varying average CO2 emissions.
 
-<img width="2351" height="1454" alt="kprototypes_elbow_method" src="https://github.com/user-attachments/assets/0e9bede5-33c2-402e-92d8-cdf3597c0a8f" />
+<img width="4001" height="2157" alt="cluster_dashboard" src="https://github.com/user-attachments/assets/7f52c629-75de-4037-b6af-fdbc234ae545" />
+
 
 
 #### Categorical Distribution per Cluster
@@ -191,14 +192,16 @@ The `df_unique` dataset was split into training and testing sets. Categorical fe
 ### 2. Feature Set Comparison
 Different combinations of features were tested using a Random Forest Regressor and 5-fold cross-validation to identify the optimal set for predicting CO2 emissions. The goal was to find a balance between model complexity and predictive performance (measured by Mean Absolute Error).
 
-<img width="1000" height="500" alt="feature_set_comparison" src="https://github.com/user-attachments/assets/cc2bcc5f-74b9-4d8f-9f31-0d36efd214b3" />
+<img width="1000" height="500" alt="feature_set_comparison" src="https://github.com/user-attachments/assets/d4a25590-274b-4b28-bcad-da38ba5433d7" />
+
 
 The comparison revealed that using `all_features` (Empty Mass Euro Avg (kg), Maximum Power (kW), Fuel, Gearbox, Body) yielded the best performance, indicating that all these characteristics contribute to CO2 emission prediction.
 
 ### 3. Model Performance
 Several regression models, including Linear Regression, Ridge, Lasso, Random Forest, and Gradient Boosting, were trained and evaluated using 'all features'. Performance was assessed based on R² (coefficient of determination) and Mean Absolute Error (MAE).
 
-![Uploading model_performance-2.png…]()
+
+<img width="1583" height="884" alt="model_performance-2" src="https://github.com/user-attachments/assets/da353566-4844-4305-8cb1-26e58737d7e0" />
 
 
 
@@ -209,14 +212,16 @@ Several regression models, including Linear Regression, Ridge, Lasso, Random For
 ### 4. Random Forest Feature Importance
 The Random Forest model's inherent ability to quantify feature importance was leveraged to understand which vehicle characteristics are most influential in predicting CO2 emissions. The importances are permuted through the best feature set: `all_features`.
 
-<img width="1600" height="900" alt="feature_importance" src="https://github.com/user-attachments/assets/862d1935-e2c0-4b68-a0b6-8c7e4b75939a" />
+<img width="1584" height="884" alt="feature_importance-2" src="https://github.com/user-attachments/assets/38e79ce2-cb4b-4f25-800f-407ee583148c" />
+
 
 The top features driving CO2 emissions were `Empty Mass Euro Avg (kg)` and `Maximum Power (kW)`, followed by `Fuel` type and `Gearbox` type. This aligns with findings from the EDA and correlation analysis, reinforcing the robustness of these drivers.
 
 ### 5. Partial Dependence Plots (PDPs)
 Partial Dependence Plots illustrate the marginal effect of one or two features on the predicted CO2 emissions, after accounting for the average effect of all other features. They provide intuitive insights into the relationship between predictors and the target variable.
 
-<img width="1600" height="900" alt="partial_dependence_plots" src="https://github.com/user-attachments/assets/f5f41712-8e76-4a59-8803-f112e35aeb53" />
+<img width="1584" height="884" alt="partial_dependence_plots-2" src="https://github.com/user-attachments/assets/7293688b-6f07-41c9-845c-506e18342939" />
+
 
 Key observations from PDPs:
 *   **Empty Mass Euro Avg (kg)**: CO2 emissions show a clear increasing trend with vehicle mass.
@@ -227,13 +232,15 @@ Key observations from PDPs:
 ### 6. SHAP (SHapley Additive exPlanations) Summary Plot
 SHAP values provide a unified measure of feature importance, explaining how each feature contributes to a prediction for individual instances, and aggregated, how they impact the overall model output. The summary plot shows the distribution of SHAP values for each feature across all predictions.
 
-<img width="1600" height="900" alt="shap_summary_plot" src="https://github.com/user-attachments/assets/56d3d111-cb56-427d-b205-552d7039a5b8" />
+<img width="783" height="933" alt="shap_summary_plot" src="https://github.com/user-attachments/assets/cb1e35a6-e73c-49fa-9c84-39724384d64c" />
+
 
 The SHAP summary plot confirms that `Empty Mass Euro Avg (kg)` and `Maximum Power (kW)` are the most impactful features, pushing CO2 predictions higher or lower depending on their values. The spread of SHAP values for `Fuel` and `Gearbox` indicates their significant contribution to varying predictions.
 
 ### 7. Single Decision Tree Example
 To further understand the inner workings of the Random Forest model, an example of a single decision tree (up to a certain depth) from the ensemble was visualized. This shows how the model makes decisions by splitting data based on feature values to arrive at a CO2 prediction.
 
-<img width="1600" height="900" alt="single_tree_plot" src="https://github.com/user-attachments/assets/6a3ee25f-1548-4b93-97d7-b7a4119686db" />
+<img width="1552" height="884" alt="single_tree_plot" src="https://github.com/user-attachments/assets/38507a47-f18d-4bbe-a0eb-fe88778d2be6" />
+
 
 This visualization demonstrates the hierarchical decision-making process within individual trees, highlighting the sequence of feature splits that lead to a final emission estimate.
