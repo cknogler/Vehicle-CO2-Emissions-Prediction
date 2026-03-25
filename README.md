@@ -96,7 +96,7 @@ Records sharing identical values across these columns were considered duplicates
 After filtering for Petrol and Diesel vehicles, an impressive **87.0%** of the remaining records were identified as duplicates of existing mechanical configurations. This process reduced over 43,000 combustion vehicles to just **5,700** unique entries, providing a cleaner and more representative dataset (`df_unique`) for further analysis.
 
 ### CO2 Analysis after Deduplication
-Following deduplication, the distribution of `CO2 (g/km)` was re-examined. While the overall shape remained similar, the deduplicated dataset provided a more accurate representation of the diversity of CO2 emissions across distinct vehicle types rather than inflated counts due to redundant data entries.
+Following deduplication, the distribution of `CO2 (g/km)` was re-examined. The deduplicated dataset provided a more accurate representation of the diversity of CO2 emissions across distinct vehicle types rather than inflated counts due to redundant data entries.
 
 <img width="1600" height="800" alt="co2_analysis_after_deduplication" src="https://github.com/user-attachments/assets/6fd22128-a905-4169-87ed-9eebe90ac536" />
 
@@ -118,20 +118,20 @@ Only **1** outlier was detected for `Empty Mass Euro Avg (kg)`. This outlier rep
 After ensuring data quality and reducing redundancy, a deeper dive into the relationships between key features and CO2 emissions was conducted using the deduplicated dataset (`df_unique`).
 
 ### Empty Mass and CO2
-A strong positive linear relationship was observed between `Empty Mass Euro Avg (kg)` and `CO2 (g/km)`. The Pearson correlation coefficient was approximately **0.68**, and the Spearman correlation was **0.78**. This indicates that as vehicle mass increases, CO2 emissions generally increase. The R² value of **0.46** suggests that about 46% of the variance in CO2 emissions can be explained by empty mass.
+A strong positive relationship was observed between vehicle empty mass and CO₂ emissions. The Pearson correlation coefficient **0.69** and Spearman rank correlation **0.65** both indicate a strong association, suggesting that heavier vehicles consistently emit more CO₂. The R² value of 0.46 implies that approximately 46% of the variance in CO₂ emissions can be explained by vehicle mass, with the remaining variation attributable to other factors.
 
 <img width="1600" height="800" alt="mass_co2_correlation" src="https://github.com/user-attachments/assets/7fcaa40b-9e38-44b1-8f38-2b83a7d48077" />
 
 
 ### Combined Consumption and CO2
-Combined fuel consumption demonstrated an extremely strong positive linear and monotonic relationship with CO2 emissions. Both Pearson and Spearman correlation coefficients were approximately **0.98**, with an R² value of **0.96**. This high correlation confirms that `Combined Consumption (l/100km)` is the primary driver of `CO2 (g/km)`.
+Combined fuel consumption demonstrated an extremely strong positive linear and monotonic relationship with CO2 emissions. Correlation coefficients were approximately **0.98** (Spearman) and **0.96** (Pearson), with an R² value of **0.96**. This high correlation confirms that `Combined Consumption (l/100km)` is the primary driver of `CO2 (g/km)`.
 
 <img width="1600" height="800" alt="consumption_co2_correlation" src="https://github.com/user-attachments/assets/7c930808-9802-4b59-9ae3-5fca33971d45" />
 
 
 
 ### Maximum Power and CO2
-Maximum power also showed a strong positive linear relationship with CO2 emissions (Pearson correlation of **0.67**, Spearman of **0.54**). The R² value of **0.45** suggests that approximately 45% of the variance in CO2 emissions is explained by maximum power. While significant, its explanatory power is slightly less than that of empty mass and considerably less than combined consumption.
+Maximum power shows a positive relationship with CO₂ emissions, with a moderate Pearson correlation (0.36) and a weaker Spearman correlation (0.18), suggesting a limited and potentially non-linear association. The R² value of **0.45** suggests that approximately 45% of the variance in CO2 emissions is explained by maximum power. While significant, its explanatory power is slightly less than that of empty mass and considerably less than combined consumption.
 
 <img width="1600" height="800" alt="power_co2_correlation" src="https://github.com/user-attachments/assets/46de3c52-018b-4c97-a314-82a5c412b682" />
 
