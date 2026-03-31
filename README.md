@@ -20,10 +20,10 @@ Below is a visual representation of the systematic approach taken in this analys
 ## Data Preprocessing
 Our initial dataset, `cl_JUIN_2013-complet3.csv`, underwent several critical preprocessing steps to ensure data quality and suitability for analysis:
 
-### 1. Column Renaming and Modality Cleaning
+### Column Renaming and Modality Cleaning
 Column names were standardized for clarity and consistency (e.g., "Marque" to "Brand", "CO2 (g/km)" to "CO2 (g/km)"). Additionally, specific modalities within categorical columns like 'Gearbox' and 'Field V9' were corrected to unify similar entries.
 
-### 2. Handling Missing Values
+### Handling Missing Values
 Missing values were thoroughly investigated. A heatmap and bar plot visually represented the distribution and count of missing data across columns. 
 
 
@@ -31,7 +31,7 @@ Key imputation strategies included:
 *   **Pollutant Calculation**: Missing `HC (g/km)` and `NOX (g/km)` values were derived from `HC+NOX (g/km)` where possible.
 *   **Electric Vehicles**: For electric vehicles (`Fuel == 'EL'`), all pollutant and consumption-related `NaN` values were replaced with `0`, reflecting their zero-emission nature.
 
-### 3. Calculating Average Mass
+### Calculating Average Mass
 To create a single representative mass feature, the `Empty Mass Euro Min (kg)` and `Empty Mass Euro Max (kg)` columns were merged into a new column, `Empty Mass Euro Avg (kg)`, which represents the average of the minimum and maximum empty masses. The original min/max columns were subsequently dropped.
 
 ## Exploratory Data Analysis (EDA)
@@ -79,10 +79,10 @@ Multicollinearity between `Maximum Power (kW)` and `Empty Mass Euro Avg (kg)` wa
 
 To focus on unique mechanical configurations within each Brand and Model and reduce redundancy, especially within the dominant Mercedes-Benz fleet, a deduplication process was applied. This involved several steps:
 
-### 1. Fuel Filter
+### Fuel Filter
 First, the dataset was filtered to include only Petrol (ES) and Diesel (GO) vehicles, as these represent the vast majority of the fleet and are the primary focus for emission analysis. This step removed non-combustion and niche fuel types.
 
-### 2. Identifying Unique Configurations
+### Identifying Unique Configurations
 Unique vehicle configurations were identified based on a combination of key mechanical and performance attributes:
 *   `Brand`, `Folder Model`, `Fuel`, `Body`, `Gearbox`
 *   `Maximum Power (kW)`, `Empty Mass Euro Avg (kg)`
@@ -142,20 +142,20 @@ Maximum power shows a positive relationship with CO₂ emissions, with a moderat
 
 To identify distinct segments within the vehicle fleet based on their characteristics and CO2 emissions, K-Prototypes clustering was employed. This algorithm is suitable for datasets containing a mix of numerical and categorical features.
 
-### 1. Data Preparation for Clustering
+### Data Preparation for Clustering
 The deduplicated dataset (`df_unique`) was used. Key features for clustering included:
 *   **Categorical**: `Body`, `Fuel`, `Gearbox`
 *   **Numerical**: `Maximum Power (kW)`, `Empty Mass Euro Avg (kg)`
 
 These features were selected as they represent core vehicle characteristics that influence emissions. Numerical features were scaled using `StandardScaler` to ensure they contributed equally to the distance calculation in the clustering algorithm.
 
-### 2. Elbow Method for Optimal K
+### Elbow Method for Optimal K
 The Elbow Method was used to determine the optimal number of clusters (k). The 'cost' (a measure of within-cluster dispersion) was plotted against the number of clusters. The \"elbow point\", where the rate of decrease in cost significantly slows down, suggested an optimal `k`.
 
 <img width="2351" height="1454" alt="kprototypes_elbow_method" src="https://github.com/user-attachments/assets/59edbfb4-b65f-4ee3-adc5-49dced5006dd" />
 
 
-### 3. Final K-Prototypes Model and Cluster Characteristics
+### Final K-Prototypes Model and Cluster Characteristics
 Based on the Elbow Method, **4** clusters were chosen. The resulting clusters exhibit distinct profiles across both numerical and categorical features:
 
 #### Cluster Dashboard
@@ -187,10 +187,10 @@ These distinct clusters provide valuable segments for targeted emission
 
 To predict CO2 emissions based on vehicle characteristics, various regression models were trained and evaluated on the deduplicated dataset (`df_unique`).
 
-### 1. Data Preparation for Modeling
+### Data Preparation for Modeling
 The `df_unique` dataset was split into training and testing sets. Categorical features were one-hot encoded, and numerical features were scaled using `StandardScaler` for linear models. For tree-based models, numerical features were passed through without scaling.
 
-### 2. Feature Set Comparison
+### Feature Set Comparison
 Different combinations of features were tested using a Random Forest Regressor and 5-fold cross-validation to identify the optimal set for predicting CO2 emissions. The goal was to find a balance between model complexity and predictive performance (measured by Mean Absolute Error).
 
 <img width="1000" height="500" alt="feature_set_comparison" src="https://github.com/user-attachments/assets/d4a25590-274b-4b28-bcad-da38ba5433d7" />
@@ -198,7 +198,7 @@ Different combinations of features were tested using a Random Forest Regressor a
 
 The comparison revealed that using `all_features` (Empty Mass Euro Avg (kg), Maximum Power (kW), Fuel, Gearbox, Body) yielded the best performance, indicating that all these characteristics contribute to CO2 emission prediction.
 
-### 3. Model Performance
+### Model Performance
 Several regression models, including Linear Regression, Ridge, Lasso, Random Forest, and Gradient Boosting, were trained and evaluated using 'all features'. Performance was assessed based on R² (coefficient of determination) and Mean Absolute Error (MAE).
 
 
@@ -210,7 +210,7 @@ Several regression models, including Linear Regression, Ridge, Lasso, Random For
 *   **Gradient Boosting** also performed very well, closely trailing Random Forest.
 *   **Linear models** (Linear Regression, Ridge, Lasso) performed reasonably but were outperformed by tree-based models, suggesting non-linear relationships are prominent in the data.
 
-### 4. Random Forest Feature Importance
+### Random Forest Feature Importance
 The Random Forest model's inherent ability to quantify feature importance was leveraged to understand which vehicle characteristics are most influential in predicting CO2 emissions. The importances are permuted through the best feature set: `all_features`.
 
 <img width="1584" height="884" alt="feature_importance-2" src="https://github.com/user-attachments/assets/38e79ce2-cb4b-4f25-800f-407ee583148c" />
@@ -218,8 +218,8 @@ The Random Forest model's inherent ability to quantify feature importance was le
 
 The top features driving CO2 emissions were `Empty Mass Euro Avg (kg)` and `Maximum Power (kW)`, followed by `Fuel` type and `Gearbox` type. This aligns with findings from the EDA and correlation analysis, reinforcing the robustness of these drivers.
 
-### 5. Partial Dependence Plots (PDPs)
-Partial Dependence Plots illustrate the marginal effect of one or two features on the predicted CO2 emissions, after accounting for the average effect of all other features. They provide intuitive insights into the relationship between predictors and the target variable.
+### Partial Dependence Plots (PDPs)
+Partial Dependence Plots illustrate the marginal effect of a features on the predicted CO2 emissions, after accounting for the average effect of all other features. They provide intuitive insights into the relationship between predictors and the target variable.
 
 <img width="1584" height="884" alt="partial_dependence_plots-2" src="https://github.com/user-attachments/assets/7293688b-6f07-41c9-845c-506e18342939" />
 
