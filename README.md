@@ -177,7 +177,7 @@ To visualize the relative differences between clusters across the key profiling 
 *   **Cluster 0**: Might represent entry-level vehicles with lower power, mass, and CO2.
 *   **Cluster 1**: Could be medium-sized vehicles with moderate power, mass, and CO2.
 *   **Cluster 2**: Potentially compact, efficient vehicles.
-*   **Cluster 3**: Likely high-performance or heavy-duty vehicles with higher power, mass, and CO2.
+*   **Cluster 3**: Heavy-duty vehicles (MINIBUS) with higher power, mass, and CO2.
 
 <img width="4834" height="2495" alt="cluster_profiles_normalized_data" src="https://github.com/user-attachments/assets/d721649f-8c42-4c09-8b70-f1ef31433b50" />
 
