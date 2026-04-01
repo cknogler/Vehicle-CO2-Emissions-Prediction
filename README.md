@@ -175,9 +175,9 @@ Stacked bar charts illustrate the distribution of categorical features (`Body`, 
 #### Normalized Cluster Profiles (Radar and Heatmap)
 To visualize the relative differences between clusters across the key profiling features (`Power`, `Mass`, `CO2`), normalized radar charts and heatmaps were generated. This helps in understanding the unique \"signature\" of each cluster. For example:
 *   **Cluster 0**: Might represent entry-level vehicles with lower power, mass, and CO2.
-*   **Cluster 1**: Could be medium-sized vehicles with moderate power, mass, and CO2.
+*   **Cluster 1**: Heavy duty vehicles with moderate power, high mass, and CO2.
 *   **Cluster 2**: Potentially compact, efficient vehicles.
-*   **Cluster 3**: Heavy-duty vehicles (MINIBUS) with higher power, mass, and CO2.
+*   **Cluster 3**: High performance vehicles with high power, medium mass, and CO2.
 
 <img width="4834" height="2495" alt="cluster_profiles_normalized_data" src="https://github.com/user-attachments/assets/d721649f-8c42-4c09-8b70-f1ef31433b50" />
 
