@@ -17,6 +17,11 @@ import streamlit as st
 from scipy import stats
 from scipy.stats import mannwhitneyu, pearsonr, spearmanr
 from sklearn.cluster import KMeans
+try:
+    from kmodes.kprototypes import KPrototypes
+    KPROTO_AVAILABLE = True
+except ImportError:
+    KPROTO_AVAILABLE = False
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.inspection import PartialDependenceDisplay
@@ -205,6 +210,10 @@ def make_df_unique(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def run_clustering(_df: pd.DataFrame, k: int = 4):
+    """
+    K-Prototypes clustering (kmodes) for mixed numeric + categorical data.
+    Falls back to KMeans with label-encoding if kmodes is not installed.
+    """
     categorical_cols = [c for c in ['Body', 'Fuel', 'Gearbox'] if c in _df.columns]
     numeric_cols     = [c for c in ['Maximum Power (kW)', 'Empty Mass Euro Avg (kg)'] if c in _df.columns]
     feature_cols     = categorical_cols + numeric_cols
@@ -212,20 +221,41 @@ def run_clustering(_df: pd.DataFrame, k: int = 4):
 
     df_c = _df[feature_cols + [target_col]].dropna().copy()
 
-    scaler = StandardScaler()
-    df_scaled = df_c.copy()
-    df_scaled[numeric_cols] = scaler.fit_transform(df_scaled[numeric_cols])
+    if KPROTO_AVAILABLE and len(categorical_cols) > 0 and len(numeric_cols) > 0:
+        # ── K-Prototypes: native mixed-data clustering ────────────────────────
+        # Scale numeric columns only
+        scaler = StandardScaler()
+        df_kp = df_c.copy()
+        df_kp[numeric_cols] = scaler.fit_transform(df_kp[numeric_cols])
 
-    # Encode categoricals for KMeans
-    le_dict = {}
-    for col in categorical_cols:
-        le = LabelEncoder()
-        df_scaled[col] = le.fit_transform(df_scaled[col].astype(str))
-        le_dict[col] = le
+        # Build feature matrix: categoricals must be object dtype
+        for col in categorical_cols:
+            df_kp[col] = df_kp[col].astype(str)
 
-    X = df_scaled[feature_cols].values
-    km = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
-    df_c['Cluster'] = km.fit_predict(X)
+        X_matrix = df_kp[feature_cols].to_numpy(dtype=object)
+        categorical_idx = [feature_cols.index(col) for col in categorical_cols]
+
+        kproto = KPrototypes(
+            n_clusters=k,
+            init='Cao',
+            n_init=5,
+            verbose=0,
+            random_state=RANDOM_STATE
+        )
+        df_c['Cluster'] = kproto.fit_predict(X_matrix, categorical=categorical_idx)
+
+    else:
+        # ── Fallback: KMeans with label-encoding ──────────────────────────────
+        scaler = StandardScaler()
+        df_scaled = df_c.copy()
+        df_scaled[numeric_cols] = scaler.fit_transform(df_scaled[numeric_cols])
+        for col in categorical_cols:
+            le = LabelEncoder()
+            df_scaled[col] = le.fit_transform(df_scaled[col].astype(str))
+        X = df_scaled[feature_cols].values
+        km = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
+        df_c['Cluster'] = km.fit_predict(X)
+
     return df_c
 
 
