@@ -839,6 +839,9 @@ with tabs[5]:
             st.error(f"Training fehlgeschlagen: {e}")
             st.stop()
 
+    # best_model_name available for the rest of this tab
+    best_model_name = results_df.iloc[0]["Model"]
+
     # Feature set comparison (wie im Notebook)
     st.subheader("Feature Set Comparison (5-Fold CV, Random Forest)")
     fig, ax = plt.subplots(figsize=(10, 5))
