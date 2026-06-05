@@ -850,7 +850,7 @@ with tabs[5]:
 
     st.success(f"✅ Bestes Feature-Set: **{best_fs}** | Features: {', '.join(feature_cols)}")
     st.dataframe(fs_df[["Feature_Set","Features","CV_MAE_mean","CV_MAE_std"]]
-                 .style.format({"CV_MAE_mean":"{:.2f}","CV_MAE_std":"{:.2f}"}),
+                 .style.format({"CV_MAE_mean": "{:.2f}", "CV_MAE_std": "{:.2f}"}),
                  width='stretch')
 
     st.markdown("---")
@@ -869,10 +869,11 @@ with tabs[5]:
     fig.suptitle(f"Regression Model Performance – {best_fs}", fontsize=16)
     fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
 
+    num_cols_res = results_df.select_dtypes(include='number').columns.tolist()
     st.dataframe(results_df.style
                  .highlight_max(subset=["Test_R2"], color="#c8e6c9")
                  .highlight_min(subset=["Test_MAE"], color="#c8e6c9")
-                 .format("{:.4f}"),
+                 .format({c: "{:.4f}" for c in num_cols_res}),
                  width='stretch')
 
     st.markdown("---")
@@ -886,7 +887,7 @@ with tabs[5]:
     for sp in ["top","right"]: ax.spines[sp].set_visible(False)
     fig.suptitle(f"Top 15 Random Forest Feature Importances ({best_fs})", fontsize=16)
     fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
-    st.dataframe(fi_df.head(15).style.format({"Importance":"{:.4f}"}), width='stretch')
+    st.dataframe(fi_df.head(15), width='stretch')
 
     st.markdown("---")
 
