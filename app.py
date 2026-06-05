@@ -911,8 +911,11 @@ with tabs[5]:
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
-    st.header("🎯 CO₂-Rechner")
-    st.markdown("Eigene Fahrzeugparameter eingeben → CO₂-Vorhersage mit dem besten Modell.")
+    st.header("🎯 CO₂-Rechner & Markenvergleich")
+    st.markdown(
+        "Konfiguration wählen → CO₂-Vorhersage + **welche Marke** "
+        "bei gleichen Parametern am wenigsten CO₂ ausstößt."
+    )
 
     try:
         (fitted, results_df, fs_df, best_fs, feature_cols,
@@ -922,7 +925,9 @@ with tabs[6]:
         best_model_name = results_df.iloc[0]["Model"]
         best_pipeline   = fitted[best_model_name]
 
+        # ── Eingabe-Formular ──────────────────────────────────────────────────
         with st.form("co2_form"):
+            st.subheader("Fahrzeugkonfiguration")
             col1, col2 = st.columns(2)
             inputs = {}
             with col1:
@@ -932,48 +937,158 @@ with tabs[6]:
                 if "Empty Mass Euro Avg (kg)" in feature_cols:
                     inputs["Empty Mass Euro Avg (kg)"] = st.number_input(
                         "Leergewicht (kg)", 700, 4000, 1400, 25)
+                # Toleranz für den Markenvergleich
+                power_tol = st.number_input("Toleranz Leistung (±kW)", 0, 100, 15, 5)
+                mass_tol  = st.number_input("Toleranz Gewicht (±kg)",  0, 500, 100, 25)
             with col2:
                 for col in ["Fuel", "Gearbox", "Body"]:
                     if col in feature_cols:
                         opts = sorted(df_unique[col].dropna().unique().tolist())
                         if opts:
                             inputs[col] = st.selectbox(col, opts)
-
-            submitted = st.form_submit_button("CO₂ berechnen 🚀")
+            submitted = st.form_submit_button("CO₂ berechnen & Marken vergleichen 🚀")
 
         if submitted:
+            # ── 1. ML-Vorhersage ─────────────────────────────────────────────
             row = {f: inputs.get(f, 0) for f in feature_cols}
             df_in = pd.DataFrame([row])
             pred = best_pipeline.predict(df_in)[0]
 
-            euro = ("A (≤100)" if pred<=100 else "B (101–120)" if pred<=120
-                    else "C (121–140)" if pred<=140 else "D (141–160)" if pred<=160
-                    else "E (161–200)" if pred<=200 else "F/G (>200)")
+            euro  = ("A (≤100)" if pred<=100 else "B (101–120)" if pred<=120
+                     else "C (121–140)" if pred<=140 else "D (141–160)" if pred<=160
+                     else "E (161–200)" if pred<=200 else "F/G (>200)")
             color = "green" if pred<=120 else "orange" if pred<=160 else "red"
 
             st.markdown(f"""
             <div style="background:{color}22;border-left:6px solid {color};
                         padding:24px;border-radius:8px;margin:12px 0;">
-              <h2 style="color:{color};margin:0">🚗 {pred:.1f} g/km CO₂</h2>
+              <h2 style="color:{color};margin:0">🚗 Vorhergesagter CO₂-Ausstoß: {pred:.1f} g/km</h2>
               <p style="font-size:18px;margin:8px 0">EU-Effizienzklasse: <strong>{euro}</strong></p>
               <p style="color:gray;font-size:13px;margin:0">
                 Modell: {best_model_name} · Feature Set: {best_fs} ·
-                Test MAE ≈ {results_df.iloc[0]['Test_MAE']:.1f} g/km
+                Test MAE ≈ {results_df.iloc[0]["Test_MAE"]:.1f} g/km
               </p>
             </div>""", unsafe_allow_html=True)
 
-            pct = (df_unique['CO2 (g/km)'] <= pred).mean() * 100
+            pct = (df_unique["CO2 (g/km)"] <= pred).mean() * 100
             st.metric("Flottenvergleich", f"Besser als {pct:.0f}% aller Fahrzeuge im Datensatz")
 
+            # Histogramm Flottenvergleich
             fig, ax = plt.subplots(figsize=(10, 3))
-            ax.hist(df_unique['CO2 (g/km)'].dropna(), bins=60,
+            ax.hist(df_unique["CO2 (g/km)"].dropna(), bins=60,
                     color=BLUE, alpha=0.6, label="Alle Fahrzeuge")
-            ax.axvline(pred, color='red', lw=2.5, linestyle='--',
-                       label=f'Deine Eingabe: {pred:.0f} g/km')
-            ax.set_xlabel('CO2 (g/km)'); ax.set_ylabel('Häufigkeit')
-            ax.set_title('Einordnung im Flottenvergleich')
-            ax.legend()
-            plt.tight_layout(); st.pyplot(fig); plt.close()
+            ax.axvline(pred, color="red", lw=2.5, linestyle="--",
+                       label=f"Deine Konfiguration: {pred:.0f} g/km")
+            ax.set_xlabel("CO2 (g/km)"); ax.set_ylabel("Häufigkeit")
+            ax.set_title("Einordnung im Flottenvergleich")
+            ax.legend(); plt.tight_layout(); st.pyplot(fig); plt.close()
+
+            # ── 2. Markenvergleich bei ähnlicher Konfiguration ───────────────
+            st.markdown("---")
+            st.subheader("🏷️ Markenvergleich – gleiche Konfiguration")
+            st.caption(
+                f"Fahrzeuge im Datensatz mit: Fuel={inputs.get('Fuel','–')} · "
+                f"Gearbox={inputs.get('Gearbox','–')} · "
+                f"Body={inputs.get('Body','–')} · "
+                f"Leistung ±{power_tol} kW · Gewicht ±{mass_tol} kg"
+            )
+
+            # Filter: gleiche Kategorien + numerische Toleranz
+            mask = pd.Series([True] * len(df_unique), index=df_unique.index)
+            for cat_col in ["Fuel", "Gearbox", "Body"]:
+                if cat_col in inputs and cat_col in df_unique.columns:
+                    mask &= df_unique[cat_col] == inputs[cat_col]
+            if "Maximum Power (kW)" in inputs and "Maximum Power (kW)" in df_unique.columns:
+                p = inputs["Maximum Power (kW)"]
+                mask &= df_unique["Maximum Power (kW)"].between(p - power_tol, p + power_tol)
+            if "Empty Mass Euro Avg (kg)" in inputs and "Empty Mass Euro Avg (kg)" in df_unique.columns:
+                m = inputs["Empty Mass Euro Avg (kg)"]
+                mask &= df_unique["Empty Mass Euro Avg (kg)"].between(m - mass_tol, m + mass_tol)
+
+            df_match = df_unique[mask].copy()
+
+            if len(df_match) == 0:
+                st.warning(
+                    f"Keine Fahrzeuge mit dieser Konfiguration im Datensatz gefunden. "
+                    f"Toleranz erhöhen (aktuell: ±{power_tol} kW / ±{mass_tol} kg)."
+                )
+            else:
+                st.success(f"**{len(df_match)} Fahrzeuge** gefunden, die dieser Konfiguration entsprechen.")
+
+                # Marken-Aggregation: Ø CO₂, Min CO₂, Anzahl Modelle
+                brand_summary = (
+                    df_match.groupby("Brand")["CO2 (g/km)"]
+                    .agg(
+                        Modelle="count",
+                        CO2_Min="min",
+                        CO2_Mittel="mean",
+                        CO2_Max="max",
+                    )
+                    .round(1)
+                    .sort_values("CO2_Mittel")
+                    .reset_index()
+                )
+
+                # Barplot: Ø CO₂ je Marke
+                top_n = min(20, len(brand_summary))
+                plot_brands = brand_summary.head(top_n)
+
+                fig, ax = plt.subplots(figsize=(10, max(4, top_n * 0.45)))
+                colors_bar = [
+                    "#2ecc71" if v == plot_brands["CO2_Mittel"].min()
+                    else "#e74c3c" if v == plot_brands["CO2_Mittel"].max()
+                    else BLUE
+                    for v in plot_brands["CO2_Mittel"]
+                ]
+                bars = ax.barh(plot_brands["Brand"], plot_brands["CO2_Mittel"],
+                               color=colors_bar, alpha=0.85)
+
+                # Werte ans Ende der Balken
+                for bar, val in zip(bars, plot_brands["CO2_Mittel"]):
+                    ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
+                            f"{val:.1f}", va="center", fontsize=9)
+
+                # ML-Vorhersage als Referenzlinie
+                ax.axvline(pred, color="red", lw=1.5, linestyle="--",
+                           label=f"ML-Vorhersage: {pred:.0f} g/km")
+                ax.set_xlabel("Ø CO₂ (g/km)")
+                title_cfg = (f"Fuel={inputs.get('Fuel','-')} · "
+                             f"Gearbox={inputs.get('Gearbox','-')} · "
+                             f"Body={inputs.get('Body','-')}")
+                ax.set_title(
+                    f"Markenvergleich bei gleicher Konfiguration\n({title_cfg})",
+                    fontsize=12
+                )
+                ax.legend()
+                for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+                plt.tight_layout(); st.pyplot(fig); plt.close()
+
+                # Beste & schlechteste Marke hervorheben
+                best_brand  = brand_summary.iloc[0]
+                worst_brand = brand_summary.iloc[-1]
+                c1, c2 = st.columns(2)
+                best_txt = (f"Niedrigster CO2: {best_brand['Brand']} | "
+                            f"{best_brand['CO2_Mittel']:.1f} g/km "
+                            f"(Min {best_brand['CO2_Min']:.0f}, "
+                            f"{int(best_brand['Modelle'])} Modelle)")
+                worst_txt = (f"Hoechster CO2: {worst_brand['Brand']} | "
+                             f"{worst_brand['CO2_Mittel']:.1f} g/km "
+                             f"(Max {worst_brand['CO2_Max']:.0f}, "
+                             f"{int(worst_brand['Modelle'])} Modelle)")
+                c1.success(f'🥇 **Niedrigster CO2:** ' + best_txt)
+                c2.error(f'⚠️ **Hoechster CO2:** ' + worst_txt)
+
+                # Detailtabelle
+                with st.expander("📋 Alle gefundenen Fahrzeuge anzeigen"):
+                    show_cols = [c for c in
+                                 ["Brand", "Folder Model", "Fuel", "Body", "Gearbox",
+                                  "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
+                                  "CO2 (g/km)", "Combined Consumption (l/100km)", "Clone_Count"]
+                                 if c in df_match.columns]
+                    st.dataframe(
+                        df_match[show_cols].sort_values("CO2 (g/km)").reset_index(drop=True),
+                        width="stretch"
+                    )
 
     except Exception as e:
         st.error(f"Rechner nicht verfügbar: {e}")
