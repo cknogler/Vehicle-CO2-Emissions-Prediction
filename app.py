@@ -87,8 +87,8 @@ UNIQUE_COLS = [
 ]
 
 FEATURE_SETS = {
-    "all_features": ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "Gearbox", "Body"],
-    "no_body":      ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "Gearbox"],
+    "all_features":    ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "GearType", "GearCount", "Body"],
+    "no_body":         ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "GearType", "GearCount"],
     "mass_power_fuel": ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel"],
     "mass_power_only": ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)"],
 }
@@ -164,11 +164,24 @@ def load_and_preprocess(source) -> pd.DataFrame:
     return df
 
 
+GEAR_TYPE_MAP = {"M": "Manual", "A": "Automatic", "V": "CVT",
+                  "D": "DCT", "N": "Automatic", "S": "Manual"}
+
 @st.cache_data(show_spinner=False)
 def make_df_unique(df: pd.DataFrame) -> pd.DataFrame:
     if "Fuel" not in df.columns:
         return df
     df_combus = df[df['Fuel'].isin(['ES', 'GO'])].copy()
+
+    # Split Gearbox "A 6" -> GearType="Automatic", GearCount=6
+    if "Gearbox" in df_combus.columns:
+        gear_split = df_combus["Gearbox"].astype(str).str.split(" ", expand=True)
+        df_combus["GearType"]  = gear_split[0].map(GEAR_TYPE_MAP).fillna("Other")
+        df_combus["GearCount"] = pd.to_numeric(
+            gear_split[1] if 1 in gear_split.columns else pd.Series([np.nan]*len(df_combus)),
+            errors="coerce"
+        )
+
     cols = [c for c in UNIQUE_COLS if c in df_combus.columns]
     df_unique = (
         df_combus.groupby(cols, dropna=False)
@@ -177,6 +190,16 @@ def make_df_unique(df: pd.DataFrame) -> pd.DataFrame:
         .sort_values('Clone_Count', ascending=False)
         .reset_index(drop=True)
     )
+
+    # Re-add GearType + GearCount after groupby (merge back)
+    if "Gearbox" in df_unique.columns:
+        gear_split2 = df_unique["Gearbox"].astype(str).str.split(" ", expand=True)
+        df_unique["GearType"]  = gear_split2[0].map(GEAR_TYPE_MAP).fillna("Other")
+        df_unique["GearCount"] = pd.to_numeric(
+            gear_split2[1] if 1 in gear_split2.columns else pd.Series([np.nan]*len(df_unique)),
+            errors="coerce"
+        )
+
     return df_unique
 
 
@@ -897,7 +920,7 @@ with tabs[5]:
     # Partial Dependence Plots
     st.subheader("Partial Dependence Plots – Random Forest")
     pdp_features = [f for f in ["Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
-                                 "Fuel", "Body", "Gearbox"] if f in feature_cols]
+                                 "Fuel", "Body", "GearType", "GearCount"] if f in feature_cols]
     try:
         fig, ax = plt.subplots(figsize=(16, 7))
         PartialDependenceDisplay.from_estimator(
@@ -928,32 +951,28 @@ with tabs[5]:
             else:
                 base[f] = str(df_unique[f].mode().iloc[0])
 
-        all_gearboxes = sorted(df_unique["Gearbox"].dropna().unique().tolist())
+        # Vary GearType (4 categories) x GearCount (4-8) = clean grid
+        gear_types  = ["Manual", "Automatic", "CVT", "DCT"]
+        gear_counts = sorted(df_unique["GearCount"].dropna().unique().tolist())
 
         gear_preds = []
-        for gear in all_gearboxes:
-            row = base.copy()
-            if "Gearbox" in feature_cols:
-                row["Gearbox"] = gear
-            pred_g = fitted[best_model_name].predict(pd.DataFrame([row]))[0]
-            gear_preds.append({"Gearbox": gear, "CO2_pred": round(pred_g, 1)})
+        for gtype in gear_types:
+            for gcount in gear_counts:
+                row = base.copy()
+                if "GearType"  in feature_cols: row["GearType"]  = gtype
+                if "GearCount" in feature_cols: row["GearCount"] = gcount
+                pred_g = fitted[best_model_name].predict(pd.DataFrame([row]))[0]
+                gear_preds.append({
+                    "GearType": gtype, "GearCount": int(gcount),
+                    "CO2_pred": round(pred_g, 1),
+                    "Label": gtype + " (" + str(int(gcount)) + " Gaenge)"
+                })
 
         gear_df = pd.DataFrame(gear_preds).sort_values("CO2_pred")
 
-        type_map = {"M": "Schalt", "A": "Automatik", "V": "CVT",
-                    "D": "Doppelkupplung", "N": "Automatik"}
-
-        def gear_label(g):
-            parts = str(g).split(" ")
-            t = type_map.get(parts[0], parts[0])
-            n = parts[1] if len(parts) > 1 else "?"
-            return t + " (" + n + " Gaenge)"
-
-        gear_df["Label"] = gear_df["Gearbox"].apply(gear_label)
-
         base_pred = fitted[best_model_name].predict(pd.DataFrame([base]))[0]
 
-        manual_vals = gear_df[gear_df["Gearbox"].astype(str).str.startswith("M")]["CO2_pred"]
+        manual_vals = gear_df[gear_df["GearType"] == "Manual"]["CO2_pred"]
         ref_val = manual_vals.mean() if len(manual_vals) > 0 else base_pred
         gear_df["Delta"] = (gear_df["CO2_pred"] - ref_val).round(1)
 
@@ -965,7 +984,7 @@ with tabs[5]:
         bars = axes[0].barh(gear_df["Label"], gear_df["CO2_pred"],
                             color=bar_cols, alpha=0.85, edgecolor="white")
         axes[0].axvline(base_pred, color="gray", lw=1.5, linestyle="--",
-                        label="Basis: " + str(base.get("Gearbox", "")) + " " + str(round(base_pred, 0)) + " g/km")
+                        label="Median-Basis: " + str(round(base_pred, 0)) + " g/km")
         for bar, val in zip(bars, gear_df["CO2_pred"]):
             axes[0].text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
                          str(val), va="center", fontsize=9)
@@ -999,18 +1018,19 @@ with tabs[5]:
         st.pyplot(fig)
         plt.close()
 
-        rename_dict = {"Label": "Getriebe", "CO2_pred": "CO2 (g/km)", "Delta": "Delta vs. Schalt (g/km)"}
+        rename_dict = {"Label": "Getriebe", "GearType": "Typ", "GearCount": "Gaenge", "CO2_pred": "CO2 (g/km)", "Delta": "Delta vs. Manual (g/km)"}
         st.dataframe(
-            gear_df[["Label", "Gearbox", "CO2_pred", "Delta"]]
+            gear_df[["Label", "GearType", "GearCount", "CO2_pred", "Delta"]]
             .rename(columns=rename_dict)
             .sort_values("CO2 (g/km)")
             .reset_index(drop=True),
             width="stretch"
         )
 
-        auto_vals = gear_df[gear_df["Gearbox"].astype(str).str.startswith("A")]["CO2_pred"]
-        if len(auto_vals) > 0 and len(manual_vals) > 0:
-            diff = round(auto_vals.mean() - manual_vals.mean(), 1)
+        auto_vals = gear_df[gear_df["GearType"] == "Automatic"]["CO2_pred"]
+        manual_vals2 = gear_df[gear_df["GearType"] == "Manual"]["CO2_pred"]
+        if len(auto_vals) > 0 and len(manual_vals2) > 0:
+            diff = round(auto_vals.mean() - manual_vals2.mean(), 1)
             if abs(diff) < 2:
                 st.info("Kein relevanter Getriebe-Effekt: Automatik und Schaltgetriebe unterscheiden sich bei gleicher Konfiguration nur um " + str(diff) + " g/km.")
             elif diff > 0:
