@@ -736,6 +736,13 @@ with tabs[3]:
 with tabs[4]:
     st.header("🔵 K-Prototypes Clustering")
 
+    st.markdown("""
+    > **Forschungsfrage:** Welche natürlichen Fahrzeugsegmente lassen sich anhand von
+    > technischen Merkmalen (Antriebsart, Karosserie, Getriebe, Leistung, Masse)
+    > im französischen Fahrzeugmarkt 2013 identifizieren, und wie unterscheiden sich
+    > diese Segmente in ihrem CO₂-Ausstoß?
+    """)
+
     # ── Elbow Method ─────────────────────────────────────────────────────────
     st.subheader("Elbow Method – Optimale Clusteranzahl")
     st.markdown(
@@ -919,6 +926,12 @@ with tabs[4]:
 # ═══════════════════════ TAB 5 – PREDICTION ══════════════════════════════════
 with tabs[5]:
     st.header("🤖 Predictive Modeling")
+
+    st.markdown("""
+    > **Forschungsfrage:** Welchen relativen Beitrag leisten Fahrzeugmasse, Motorleistung,
+    > Kraftstoffart, Karosserie und Getriebetyp zur Erklärung von CO₂-Emissionen,
+    > und welches minimale Feature-Set erreicht die beste Vorhersagegüte?
+    """)
 
     with st.spinner("Modelle werden trainiert (Feature Sets + CV + 5 Modelle) …"):
         try:
