@@ -592,11 +592,11 @@ with tabs[2]:
     # Pearson + Spearman heatmap (wie im Notebook)
     st.subheader("Pearson vs. Spearman Correlation Heatmap")
     st.markdown(
-        "**Vorgehen:** Zwei Korrelationsmaße werden parallel berechnet und verglichen. "
-        "**Pearson** misst lineare Zusammenhänge (Annahme: Normalverteilung). "
-        "**Spearman** misst monotone Zusammenhänge (rangbasiert, robuster gegenüber Ausreißern). "
-        "Die Gegenüberstellung deckt auf, wo nichtlineare Beziehungen vorliegen — "
-        "erkennbar an großen Unterschieden zwischen Pearson- und Spearman-Koeffizient."
+        "**Methodology:** Two correlation measures are computed and compared in parallel. "
+        "**Pearson** measures linear relationships (assumes normality). "
+        "**Spearman** measures monotonic relationships (rank-based, robust to outliers). "
+        "Comparing both reveals where non-linear relationships exist \u2014 "
+        "indicated by large differences between Pearson and Spearman coefficients."
     )
     df_numeric = df.select_dtypes(include=np.number).copy()
     pearson_corr  = df_numeric.corr(method='pearson')
@@ -610,14 +610,14 @@ with tabs[2]:
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     st.caption(
-        "**Interpretation:** CO₂ korreliert am stärksten mit Combined Consumption "
-        "(Pearson r=0.96, Spearman r=0.98) — nahezu perfekte lineare und monotone Beziehung. "
-        "Leergewicht zeigt eine starke Pearson-Korrelation (r=0.69) aber noch stärkere "
-        "Spearman-Korrelation (r=0.65) — der Zusammenhang ist überwiegend monoton. "
-        "Motorleistung hat moderate Pearson- (r=0.36) aber schwächere Spearman-Korrelation (r=0.18) "
-        "— deutet auf nichtlineare Beziehung hin. "
-        "HC und NOX korrelieren negativ mit CO₂ (r≈-0.17) — Dieselfahrzeuge emittieren "
-        "mehr NOX bei niedrigerem CO₂ als Benziner."
+        "**Interpretation:** CO\u2082 correlates most strongly with Combined Consumption "
+        "(Pearson r=0.96, Spearman r=0.98) \u2014 near-perfect linear and monotonic relationship. "
+        "Empty mass shows a strong Pearson correlation (r=0.69) and even stronger "
+        "Spearman (r=0.65) \u2014 the relationship is predominantly monotonic. "
+        "Maximum power has moderate Pearson (r=0.36) but weaker Spearman (r=0.18) "
+        "\u2014 indicates a non-linear relationship. "
+        "HC and NOX correlate negatively with CO\u2082 (r\u2248-0.17) \u2014 diesel vehicles emit "
+        "more NOX at lower CO\u2082 than petrol vehicles."
     )
 
     st.markdown("---")
@@ -625,27 +625,27 @@ with tabs[2]:
     # Detailed scatter: Mass, Consumption, Power vs CO2 (2x2 each)
     SCATTER_INTERP = {
         "Empty Mass": (
-            "**Interpretation:** Starke positive Korrelation (Pearson r=0.68, Spearman r=0.78, R²=0.46). "
-            "46% der CO₂-Varianz wird allein durch das Leergewicht erklärt. "
-            "Spearman liegt höher als Pearson — leicht nichtlinearer Zusammenhang: "
-            "bei sehr schweren Fahrzeugen (>2.500 kg) nimmt der CO₂-Anstieg pro kg ab. "
-            "Das Hexbin zeigt die Datendichte bei 1.200–2.000 kg / 100–220 g/km — "
-            "der Hauptmarkt der Kompakt- und Mittelklasse."
+            "**Interpretation:** Strong positive correlation (Pearson r=0.68, Spearman r=0.78, R²=0.46). "
+            "46% of CO₂ variance is explained by empty mass alone. "
+            "Spearman exceeds Pearson — slightly non-linear relationship: "
+            "for very heavy vehicles (>2,500 kg) the CO₂ increase per kg diminishes. "
+            "The hexbin shows data density at 1,200–2,000 kg / 100–220 g/km — "
+            "the core market of compact and mid-range vehicles."
         ),
         "Combined Consumption": (
-            "**Interpretation:** Nahezu perfekte lineare Korrelation (Pearson r=0.98, R²=0.96). "
-            "96% der CO₂-Varianz werden durch den Verbrauch erklärt — physikalisch erwartet, "
-            "da CO₂ direkt proportional zur Verbrennung ist (Benzin ≊ 2.31 kg/l, Diesel ≊ 2.64 kg/l). "
-            "Der enge Datenpfad im Hexbin zeigt quasi-deterministische Beziehung. "
-            "Hinweis: Combined Consumption ist im Prognosemodell bewusst ausgeschlossen — "
-            "es würde das Modell zu einem trivialen Umrechnungsfaktor degradieren."
+            "**Interpretation:** Near-perfect linear correlation (Pearson r=0.98, R²=0.96). "
+            "96% of CO₂ variance is explained by fuel consumption — physically expected, "
+            "as CO₂ is directly proportional to combustion (petrol ≈ 2.31 kg/l, diesel ≈ 2.64 kg/l). "
+            "The narrow data path in the hexbin confirms a quasi-deterministic relationship. "
+            "Note: Combined Consumption is deliberately excluded from the prediction model — "
+            "including it would reduce the model to a trivial conversion factor."
         ),
         "Maximum Power": (
-            "**Interpretation:** Moderate Korrelation (Pearson r=0.67, Spearman r=0.54, R²=0.45). "
-            "Pearson deutlich höher als Spearman — überwiegend linearer Zusammenhang mit hoher Streuung. "
-            "Hochleistungsfahrzeuge (>300 kW) spannen 200–550 g/km — "
-            "Leistung allein erklärt CO₂ weniger präzise als Masse, "
-            "weil Leistung stark mit Masse korreliert und Masse der eigentliche physikalische Treiber ist."
+            "**Interpretation:** Moderate correlation (Pearson r=0.67, Spearman r=0.54, R²=0.45). "
+            "Pearson notably higher than Spearman — predominantly linear relationship with high scatter. "
+            "High-performance vehicles (>300 kW) span 200–550 g/km — "
+            "power alone explains CO₂ less precisely than mass, "
+            "because power is strongly correlated with mass, which is the actual physical driver."
         ),
     }
 
@@ -785,14 +785,14 @@ with tabs[4]:
     st.header("🔵 K-Prototypes Clustering")
 
     st.markdown("""
-    > **Forschungsfrage:** Welche natürlichen Fahrzeugsegmente lassen sich anhand von
-    > technischen Merkmalen (Antriebsart, Karosserie, Getriebe, Leistung, Masse)
-    > im französischen Fahrzeugmarkt 2013 identifizieren, und wie unterscheiden sich
-    > diese Segmente in ihrem CO₂-Ausstoß?
+    > **Research Question:** Which natural vehicle segments can be identified based on
+    > technical characteristics (fuel type, body style, gearbox, power, mass)
+    > in the French vehicle market 2013, and how do these segments differ
+    > in their CO₂ emissions?
     """)
 
     # ── Elbow Method ─────────────────────────────────────────────────────────
-    st.subheader("Elbow Method – Optimale Clusteranzahl")
+    st.subheader("Elbow Method – Optimal Number of Clusters")
     st.markdown(
         "Die Elbow-Methode berechnet die **Gesamtkosten** (intra-cluster distance) "
         "für k=2 bis k=9. Der 'Knick' im Kostenverlauf zeigt das optimale k."
@@ -841,7 +841,7 @@ with tabs[4]:
         diffs2 = np.diff(np.diff(costs))
         elbow_k = k_range[np.argmax(diffs2) + 1]
         ax.axvline(elbow_k, color="red", lw=1.5, linestyle="--",
-                   label=f"Empfohlenes k = {elbow_k}")
+                   label=f"Recommended k = {elbow_k}")
         ax.scatter([elbow_k], [costs[k_range.index(elbow_k)]],
                    color="red", zorder=5, s=120)
 
@@ -854,13 +854,13 @@ with tabs[4]:
         plt.tight_layout()
         st.pyplot(fig)
         plt.close()
-        st.info(f"Empfohlene Clusteranzahl laut Elbow-Methode: **k = {elbow_k}**")
+        st.info(f"Elbow method suggests k = {elbow_k}. This analysis uses k = 4 for richer segment granularity.")
     else:
         st.warning("Elbow-Methode benötigt das kmodes-Paket.")
 
     st.markdown("---")
 
-    k = st.slider("Anzahl Cluster (k)", 2, 8, 4)
+    k = st.slider("Number of Clusters (k)", 2, 8, 4)
     with st.spinner("Clustering läuft …"):
         df_cluster_raw = run_clustering(df_unique, k=k)
 
@@ -903,23 +903,23 @@ with tabs[4]:
     st.pyplot(fig); plt.close()
 
     # ── Cluster-Interpretation ────────────────────────────────────────────────
-    st.markdown("#### Interpretation der Cluster")
+    st.markdown("#### Cluster Interpretation")
     st.markdown("""
-    Aus den Grafiken lassen sich **vier distinkte Fahrzeugsegmente** ablesen:
+    The visualisations reveal **four distinct vehicle segments**:
 
-    | Cluster | Größe | Ø CO₂ | Profil |
+    | Cluster | Size | Avg CO₂ | Profile |
     |---------|-------|--------|--------|
-    | **0** | ~2.400 (42%) | ~148 g/km | Leichte Mittelklasse — niedrige Masse & Leistung, unter Flottenø |
-    | **1** | ~1.430 (25%) | ~210 g/km | Schwere Nutzfahrzeuge — hohe Masse, überwiegend Diesel, stark über Flottenø |
-    | **2** | ~1.130 (20%) | ~126 g/km | **Effizienzcluster** — niedrigste CO₂-Werte, leichte Benziner |
-    | **3** | ~740 (13%)   | ~243 g/km | Hochleistungsfahrzeuge — höchste Leistung & Masse, weiteste Streuung |
+    | **0** | ~2,400 (42%) | ~148 g/km | Light mid-range — low mass & power, below fleet average |
+    | **1** | ~1,430 (25%) | ~210 g/km | Heavy commercial — high mass, mostly diesel, well above fleet average |
+    | **2** | ~1,130 (20%) | ~126 g/km | **Efficiency cluster** — lowest CO₂, light petrol vehicles |
+    | **3** | ~740 (13%)   | ~243 g/km | High-performance — highest power & mass, widest spread |
 
-    **Flottenø: 171.3 g/km** — Cluster 0 und 2 liegen deutlich darunter, Cluster 1 und 3 darüber.
+    **Fleet average: 171.3 g/km** — Clusters 0 and 2 are clearly below, Clusters 1 and 3 above.
 
-    **Antwort auf die Forschungsfrage:** Ja, es lassen sich natürliche Fahrzeugsegmente identifizieren.
-    Der stärkste Treiber der Clusterzugehörigkeit ist die Kombination aus **Masse und Leistung** —
-    sichtbar im Power-vs-Mass-Scatterplot. Kraftstoffart und Karosserie differenzieren zusätzlich:
-    Cluster 2 (Effizienz) ist stark Benzin-dominiert, Cluster 1 (Nutzfahrzeuge) fast ausschließlich Diesel.
+    **Answer to the research question:** Yes, natural vehicle segments can be identified.
+    The strongest driver of cluster membership is the combination of **mass and power** —
+    visible in the Power-vs-Mass scatterplot. Fuel type and body style provide additional differentiation:
+    Cluster 2 (efficiency) is strongly petrol-dominated, Cluster 1 (commercial) almost exclusively diesel.
     """)
 
     st.markdown("---")
@@ -941,11 +941,11 @@ with tabs[4]:
     st.pyplot(fig); plt.close()
 
     st.caption(
-        "Interpretation: Cluster 2 ist fast ausschließlich Benzin (ES) — der Effizienzcluster "
-        "besteht hauptsächlich aus leichten Benzin-Limousinen mit Schaltgetriebe (M 5/M 6). "
-        "Cluster 1 ist nahezu vollständig Diesel (GO) — schwere Minibuse und Transporter "
-        "dominieren dieses Segment. Cluster 3 zeigt die breiteste Karosserie-Vielfalt "
-        "(Berline, Break, TS TERRAINS/CHEMINS) — typisch für Hochleistungsfahrzeuge quer durch alle Klassen."
+        "Interpretation: Cluster 2 is almost exclusively petrol (ES) — the efficiency cluster "
+        "consists mainly of light petrol saloons with manual gearbox (M 5/M 6). "
+        "Cluster 1 is nearly entirely diesel (GO) — heavy minibuses and vans dominate this segment. "
+        "Cluster 3 shows the broadest body style variety (Berline, Break, TS TERRAINS/CHEMINS) — "
+        "typical for high-performance vehicles across all categories."
     )
 
     st.markdown("---")
@@ -1003,13 +1003,7 @@ with tabs[4]:
     st.pyplot(fig); plt.close()
 
     st.caption(
-        "Radar & Heatmap zeigen normalisierte Werte (0=Minimum, 1=Maximum des Datensatzes). "
-        "Cluster 3 hat die höchsten normalisierten Werte in allen drei Dimensionen (Power=0.50, Mass=0.47, CO₂=0.33) "
-        "— das ist das Hochleistungssegment. "
-        "Cluster 2 hat die niedrigsten Werte (Power=0.07, Mass=0.18, CO₂=0.09) "
-        "— das ist der Effizienzcluster. "
-        "Cluster 1 fällt durch einen ungewöhnlich hohen Mass-Wert (0.67) bei moderater Leistung (0.13) auf "
-        "— typisch für schwere Nutzfahrzeuge mit Dieselmotor."
+        "Radar & Heatmap show normalised values (0=minimum, 1=maximum of the dataset). Cluster 3 has the highest normalised values across all three dimensions (Power=0.50, Mass=0.47, CO₂=0.33) — this is the high-performance segment. Cluster 2 has the lowest values (Power=0.07, Mass=0.18, CO₂=0.09) — this is the efficiency cluster. Cluster 1 stands out with an unusually high Mass score (0.67) at moderate power (0.13) — typical for heavy commercial vehicles with diesel engines."
     )
 
 
@@ -1018,9 +1012,9 @@ with tabs[5]:
     st.header("🤖 Predictive Modeling")
 
     st.markdown("""
-    > **Forschungsfrage:** Welchen relativen Beitrag leisten Fahrzeugmasse, Motorleistung,
-    > Kraftstoffart, Karosserie und Getriebetyp zur Erklärung von CO₂-Emissionen,
-    > und welches minimale Feature-Set erreicht die beste Vorhersagegüte?
+    > **Research Question:** What is the relative contribution of vehicle mass, engine power,
+    > fuel type, body style and gearbox type in explaining CO₂ emissions,
+    > and which minimal feature set achieves the best predictive performance?
     """)
 
     with st.spinner("Modelle werden trainiert (Feature Sets + CV + 5 Modelle) …"):
@@ -1038,10 +1032,9 @@ with tabs[5]:
     # ── 1. Feature Set Comparison ────────────────────────────────────────────
     st.subheader("1️⃣ Feature Set Comparison (5-Fold CV, Random Forest)")
     st.markdown(
-        "Vier Feature-Kombinationen werden per **5-facher Kreuzvalidierung** mit einem "
-        "Random Forest verglichen. Der MAE (Mean Absolute Error) misst die "
-        "durchschnittliche Abweichung in g/km — **niedriger ist besser**. "
-        "So wird das informativste Feature-Set ohne Overfitting-Risiko ausgewählt."
+        "**Methodology:** Four feature combinations are compared using **5-fold cross-validation** "
+        "with a Random Forest. MAE measures the average deviation in g/km "
+        "(**lower is better**). This selects the most informative feature set without overfitting risk."
     )
     fig, ax = plt.subplots(figsize=(10, 5))
     plot_fs = fs_df.sort_values("CV_MAE_mean", ascending=True)
@@ -1055,10 +1048,10 @@ with tabs[5]:
                  .style.format({"CV_MAE_mean": "{:.2f}", "CV_MAE_std": "{:.2f}"}),
                  width='stretch')
     st.caption(
-        "Interpretation: `all_features` (Masse + Leistung + Kraftstoff + Getriebe + Karosserie) "
-        "erzielt den niedrigsten MAE — jedes Feature trägt zur Vorhersagegüte bei. "
-        "Das Weglassen der Karosserie (`no_body`) kostet ~0.6 g/km, "
-        "ohne Getriebe (`mass_power_fuel`) bereits ~3 g/km mehr Fehler."
+        "Interpretation: `all_features` (mass + power + fuel + gearbox + body) "
+        "achieves the lowest MAE — every feature contributes to predictive performance. "
+        "Removing body type (`no_body`) costs ~0.6 g/km, "
+        "dropping gearbox (`mass_power_fuel`) adds ~3 g/km more error."
     )
 
     st.markdown("---")
@@ -1066,10 +1059,10 @@ with tabs[5]:
     # ── 2. Model Performance ─────────────────────────────────────────────────
     st.subheader(f"2️⃣ Modellvergleich: R² und MAE ({best_fs})")
     st.markdown(
-        "Fünf Modelle werden auf demselben Train/Test-Split (80/20) verglichen. "
-        "**R²** misst den Anteil erklärter Varianz (1.0 = perfekt). "
-        "**MAE** ist die durchschnittliche Abweichung in g/km. "
-        "Ein großer Gap zwischen Train- und Test-Metriken deutet auf **Overfitting** hin."
+        "Five models are evaluated on the same train/test split (80/20). "
+        "**R\u00b2** measures the proportion of explained variance (1.0 = perfect). "
+        "**MAE** is the average deviation in g/km. "
+        "A large gap between train and test metrics indicates **overfitting**."
     )
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
     plot_r = results_df.sort_values("Test_R2", ascending=True)
@@ -1090,10 +1083,10 @@ with tabs[5]:
                  .format({c: "{:.4f}" for c in num_cols_res}),
                  width='stretch')
     st.caption(
-        "Interpretation: Gradient Boosting und Random Forest erreichen R²≈0.95 bei ~7–8 g/km MAE — "
-        "d.h. das Modell erklärt 95% der CO₂-Varianz mit einem durchschnittlichen Fehler von nur 7 g/km. "
-        "Lineare Modelle (Ridge, Lasso, Linear Regression) plateauieren bei R²≈0.86, "
-        "da sie nichtlineare Beziehungen (z.B. Masse × Leistung) nicht erfassen können."
+        "Interpretation: Gradient Boosting and Random Forest achieve R²≈0.95 at ~7–8 g/km MAE — "
+        "meaning the model explains 95% of CO₂ variance with an average error of just 7 g/km. "
+        "Linear models (Ridge, Lasso, Linear Regression) plateau at R\u00b2\u22480.86, "
+        "as they cannot capture non-linear relationships (e.g. mass \u00d7 power interactions)."
     )
 
     st.markdown("---")
@@ -1101,11 +1094,11 @@ with tabs[5]:
     # ── 3. Feature Importance ────────────────────────────────────────────────
     st.subheader(f"3️⃣ Feature Importance – Random Forest ({best_fs})")
     st.markdown(
-        "Feature Importance (Mean Decrease Impurity) misst, wie stark jedes Merkmal "
-        "zur Reduktion des Vorhersagefehlers beiträgt. "
-        "Kategorische Features wurden per One-Hot-Encoding aufgespalten "
-        "(z.B. `cat__Fuel_GO`, `cat__Body_MINIBUS`). "
-        "Numerische Features tragen direkt bei (`num__` Präfix)."
+        "Feature Importance (Mean Decrease Impurity) measures how strongly each feature "
+        "contributes to reducing the prediction error. "
+        "Categorical features were one-hot encoded "
+        "(e.g. `cat__Fuel_GO`, `cat__Body_MINIBUS`). "
+        "Numerical features contribute directly (`num__` prefix)."
     )
     top15 = fi_df.head(15).sort_values("Importance", ascending=True)
     fig, ax = plt.subplots(figsize=(16, 7))
@@ -1116,10 +1109,10 @@ with tabs[5]:
     fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
     st.dataframe(fi_df.head(15), width='stretch')
     st.caption(
-        "Interpretation: **Leergewicht (46.9%)** und **Motorleistung (37.2%)** dominieren gemeinsam ~84% "
-        "der erklärten Varianz — das sind die primären physikalischen Treiber des CO₂-Ausstoßes. "
-        "Ganganzahl (4.6%) und Kraftstoffart (je ~2.6%) liefern zusätzliche Information. "
-        "Karosserie und Getriebetyp spielen eine untergeordnete Rolle (<1% je Feature)."
+        "Interpretation: **Empty mass (46.9%)** and **engine power (37.2%)** together dominate ~84% "
+        "of explained variance — these are the primary physical drivers of CO₂ emissions. "
+        "Gear count (4.6%) and fuel type (~2.6% each) provide additional predictive information. "
+        "Body style and gearbox type play a minor role (<1% per feature)."
     )
 
     st.markdown("---")
@@ -1127,9 +1120,9 @@ with tabs[5]:
     # ── 4. Partial Dependence Plots ──────────────────────────────────────────
     st.subheader("4️⃣ Partial Dependence Plots – Random Forest")
     st.markdown(
-        "PDPs zeigen den **marginalen Effekt** eines einzelnen Features auf den "
-        "vorhergesagten CO₂-Wert — alle anderen Features werden dabei auf ihren "
-        "Durchschnitt fixiert (ähnlich wie Ceteris-Paribus). "
+        "PDPs show the **marginal effect** of a single feature on the predicted CO\u2082 value \u2014 "
+        "all other features are held at their mean (ceteris paribus). "
+        "This reveals the isolated, non-linear influence of each individual feature."
         "So lässt sich der isolierte, nichtlineare Einfluss jedes Merkmals ablesen."
     )
     # Fix: GearCount must be float for PDP
@@ -1150,10 +1143,10 @@ with tabs[5]:
         fig.suptitle(f"Partial Dependence Plots – Random Forest ({best_fs})", fontsize=16)
         fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
         st.caption(
-            "Interpretation: Der CO₂-Anstieg mit Masse und Leistung ist nichtlinear — "
-            "bei niedrigen Werten ist der Effekt stärker als bei hohen (abnehmende Grenzwirkung). "
-            "Mehr Gänge korrelieren leicht negativ mit CO₂ (effizientere Getriebeabstufung). "
-            "Automatik zeigt marginal höheren CO₂ als Manual — nach Kontrolle aller anderen Features."
+            "Interpretation: The CO₂ increase with mass and power is non-linear — "
+            "the effect is stronger at lower values than at higher ones (diminishing marginal returns). "
+            "More gears correlate slightly negatively with CO₂ (more efficient gear spacing). "
+            "Automatic gearbox shows marginally higher CO₂ than manual — after controlling for all other features."
         )
     except Exception as e:
         st.warning(f"PDP nicht verfügbar: {e}")
