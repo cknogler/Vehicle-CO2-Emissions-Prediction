@@ -736,6 +736,75 @@ with tabs[3]:
 with tabs[4]:
     st.header("🔵 K-Prototypes Clustering")
 
+    # ── Elbow Method ─────────────────────────────────────────────────────────
+    st.subheader("Elbow Method – Optimale Clusteranzahl")
+    st.markdown(
+        "Die Elbow-Methode berechnet die **Gesamtkosten** (intra-cluster distance) "
+        "für k=2 bis k=9. Der 'Knick' im Kostenverlauf zeigt das optimale k."
+    )
+
+    @st.cache_data(show_spinner=False)
+    def compute_elbow(_df: pd.DataFrame):
+        if not KPROTO_AVAILABLE:
+            return None
+        categorical_cols = [c for c in ["Body", "Fuel", "Gearbox"] if c in _df.columns]
+        numeric_cols     = [c for c in ["Maximum Power (kW)", "Empty Mass Euro Avg (kg)"] if c in _df.columns]
+        feature_cols     = categorical_cols + numeric_cols
+        target_col       = "CO2 (g/km)"
+
+        df_c = _df[feature_cols + [target_col]].dropna().copy()
+        scaler = StandardScaler()
+        df_kp  = df_c.copy()
+        df_kp[numeric_cols] = scaler.fit_transform(df_kp[numeric_cols])
+        for col in categorical_cols:
+            df_kp[col] = df_kp[col].astype(str)
+
+        X_matrix        = df_kp[feature_cols].to_numpy(dtype=object)
+        categorical_idx = [feature_cols.index(col) for col in categorical_cols]
+
+        costs = []
+        k_range = range(2, 10)
+        for k_val in k_range:
+            model = KPrototypes(
+                n_clusters=k_val, init="Cao",
+                n_init=3, verbose=0, random_state=RANDOM_STATE
+            )
+            model.fit_predict(X_matrix, categorical=categorical_idx)
+            costs.append(model.cost_)
+        return list(k_range), costs
+
+    with st.spinner("Elbow-Methode wird berechnet (k=2–9) …"):
+        elbow_result = compute_elbow(df_unique)
+
+    if elbow_result is not None:
+        k_range, costs = elbow_result
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.plot(k_range, costs, marker="o", color=BLUE, linewidth=2, markersize=8)
+        ax.fill_between(k_range, costs, alpha=0.1, color=BLUE)
+
+        # Mark the elbow: largest second derivative
+        diffs2 = np.diff(np.diff(costs))
+        elbow_k = k_range[np.argmax(diffs2) + 1]
+        ax.axvline(elbow_k, color="red", lw=1.5, linestyle="--",
+                   label=f"Empfohlenes k = {elbow_k}")
+        ax.scatter([elbow_k], [costs[k_range.index(elbow_k)]],
+                   color="red", zorder=5, s=120)
+
+        ax.set_xlabel("Anzahl Cluster (k)")
+        ax.set_ylabel("Kosten (intra-cluster distance)")
+        ax.set_title("Elbow Method für K-Prototypes", fontsize=13)
+        ax.set_xticks(list(k_range))
+        ax.legend()
+        for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+        st.info(f"Empfohlene Clusteranzahl laut Elbow-Methode: **k = {elbow_k}**")
+    else:
+        st.warning("Elbow-Methode benötigt das kmodes-Paket.")
+
+    st.markdown("---")
+
     k = st.slider("Anzahl Cluster (k)", 2, 8, 4)
     with st.spinner("Clustering läuft …"):
         df_cluster_raw = run_clustering(df_unique, k=k)
