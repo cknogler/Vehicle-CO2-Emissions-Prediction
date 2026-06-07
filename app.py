@@ -16,7 +16,11 @@ import seaborn as sns
 import streamlit as st
 from scipy import stats
 from scipy.stats import pearsonr, spearmanr
-from kmodes.kprototypes import KPrototypes
+try:
+    from kmodes.kprototypes import KPrototypes
+    KPROTO_AVAILABLE = True
+except ImportError:
+    KPROTO_AVAILABLE = False
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.inspection import PartialDependenceDisplay
@@ -228,6 +232,10 @@ def run_clustering(_df: pd.DataFrame, k: int = 4):
     X_matrix       = df_kp[feature_cols].to_numpy(dtype=object)
     categorical_idx = [feature_cols.index(col) for col in categorical_cols]
 
+    if not KPROTO_AVAILABLE:
+        st.error("kmodes nicht installiert. Bitte requirements.txt mit 'kmodes>=0.12.2' updaten.")
+        return df_c
+
     kproto = KPrototypes(
         n_clusters=k,
         init='Cao',
@@ -295,11 +303,25 @@ def train_all_models(_df: pd.DataFrame):
         "Ridge":             Pipeline([("pre", scaled_pre), ("m", Ridge(alpha=1.0))]),
         "Lasso":             Pipeline([("pre", scaled_pre), ("m", Lasso(alpha=0.1))]),
         "Random Forest":     Pipeline([("pre", tree_pre),
-                                       ("m", RandomForestRegressor(200, max_depth=10,
-                                                                    random_state=RANDOM_STATE,
-                                                                    n_jobs=-1))]),
+                                       ("m", RandomForestRegressor(
+                                           n_estimators=300,
+                                           max_depth=20,
+                                           max_features=0.8,
+                                           min_samples_split=2,
+                                           min_samples_leaf=1,
+                                           random_state=RANDOM_STATE,
+                                           n_jobs=-1
+                                       ))]),
         "Gradient Boosting": Pipeline([("pre", tree_pre),
-                                       ("m", GradientBoostingRegressor(random_state=RANDOM_STATE))]),
+                                       ("m", GradientBoostingRegressor(
+                                           n_estimators=200,
+                                           learning_rate=0.2,
+                                           max_depth=6,
+                                           min_samples_split=10,
+                                           subsample=1.0,
+                                           max_features=0.5,
+                                           random_state=RANDOM_STATE
+                                       ))]),
     }
 
     results = []
