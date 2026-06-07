@@ -87,7 +87,7 @@ COLUMN_MAPPING = {
 UNIQUE_COLS = [
     'Brand', 'Folder Model', 'Fuel', 'Body', 'Gearbox',
     'Maximum Power (kW)', 'Empty Mass Euro Avg (kg)',
-    'CO2 (g/km)', 'Combined Consumption (l/100km)'
+    'CO2 (g/km)', 'Combined Consumption (l/100km)', 'Range'
 ]
 
 FEATURE_SETS = {
@@ -390,7 +390,7 @@ tabs = st.tabs([
     "📉 Deduplication",
     "🔵 Clustering",
     "🤖 Prediction",
-    "🎯 CO₂-Rechner",
+    "🎯 CO₂ Calculator",
 ])
 
 # ═══════════════════════ TAB 0 – PREPROCESSING ═══════════════════════════════
@@ -1155,102 +1155,126 @@ with tabs[5]:
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
-    st.header("🎯 CO₂-Rechner für Kaufentscheidungen")
+    st.header("🎯 CO₂ Calculator & Brand Comparison")
     st.markdown(
-        "Wähle dein Wunschfahrzeug nach **Alltagsmerkmalen** — "
-        "die App zeigt den **echten CO₂-Median** aus vergleichbaren Fahrzeugen "
-        "im ADEME-Datensatz und welche Marke in deinem Segment am sparsamsten ist."
+        "Choose your vehicle by **everyday criteria** — "
+        "the app shows the **real CO₂ median** from comparable vehicles "
+        "in the ADEME dataset and which brand is most efficient in your segment."
     )
 
-    # ── Mappings: Konsumentensprache → Datensatz-Werte ────────────────────────
-    SEGMENT_MAP = {
-        "Kleinwagen":          {"body": ["BERLINE"],                              "mass": (900,  1300), "kw": (40,  75)},
-        "Kompaktklasse":       {"body": ["BERLINE", "COMBISPACE"],                "mass": (1100, 1500), "kw": (56,  110)},
-        "Mittelklasse":        {"body": ["BERLINE", "BREAK"],                     "mass": (1300, 1700), "kw": (90,  160)},
-        "Kombi":               {"body": ["BREAK"],                                "mass": (1300, 1900), "kw": (80,  160)},
-        "SUV / Geländewagen":  {"body": ["TS TERRAINS/CHEMINS", "BREAK"],         "mass": (1600, 2500), "kw": (100, 220)},
-        "Van / Großraumvan":   {"body": ["MINIBUS", "MONOSPACE", "COMBISPACE"],   "mass": (1500, 2500), "kw": (80,  180)},
-        "Cabrio / Coupe":      {"body": ["CABRIOLET", "COUPE"],                   "mass": (1100, 1800), "kw": (100, 300)},
+    # ── Mappings: consumer language → dataset values ─────────────────────────
+    # ── Mappings: AutoScout24-style Body + Fuel + PS ────────────────────────
+    BODY_MAP = {
+        "Saloon":          "BERLINE",
+        "Estate":          "BREAK",
+        "SUV / Off-Road":  "TS TERRAINS/CHEMINS",
+        "Compact MPV":     "COMBISPACE",
+        "Van / Minibus":   "MINIBUS",
+        "Coupé":           "COUPE",
+        "Convertible":     "CABRIOLET",
+        "Minivan":         "MONOSPACE",
+        "Small Minivan":   "MONOSPACE COMPACT",
+        "City Van":        "MINISPACE",
     }
 
-    MOTOR_MAP = {
-        "Schwach  (bis 75 PS / ~55 kW)":      (40,  56),
-        "Mittel   (76–130 PS / 56–96 kW)":    (56,  96),
-        "Stark    (131–200 PS / 97–147 kW)":  (96,  147),
-        "Sehr stark (über 200 PS / >147 kW)": (147, 600),
+    BODY_INFO = {
+        "Saloon":         ("~135 g/km", "1,610 configs"),
+        "Estate":         ("~148 g/km", "699 configs"),
+        "SUV / Off-Road": ("~162 g/km", "552 configs"),
+        "Compact MPV":    ("~149 g/km", "258 configs"),
+        "Van / Minibus":  ("~210 g/km", "1,167 configs"),
+        "Coupé":          ("~179 g/km", "415 configs"),
+        "Convertible":    ("~160 g/km", "297 configs"),
+        "Minivan":        ("~149 g/km", "91 configs"),
+        "Small Minivan":  ("~134 g/km", "190 configs"),
+        "City Van":       ("~124 g/km", "72 configs"),
     }
 
-    FUEL_MAP = {"Benzin": "ES", "Diesel": "GO"}
-    GEAR_MAP = {"Schaltgetriebe": "M", "Automatik": "A"}
+    POWER_MAP = {
+        "Up to 75 HP (≤55 kW)":      (0,    55),
+        "76–130 HP (56–96 kW)":       (56,   96),
+        "131–200 HP (97–147 kW)":     (97,  147),
+        "Over 200 HP (>147 kW)":      (148, 600),
+    }
 
-    # ── Formular ──────────────────────────────────────────────────────────────
+    FUEL_MAP = {"Petrol": "ES", "Diesel": "GO"}
+    GEAR_MAP = {"Manual": "M", "Automatic": "A"}
+
+    # ── Input form ───────────────────────────────────────────────────────────
     with st.form("co2_consumer_form"):
-        st.subheader("Dein Wunschfahrzeug")
+        st.subheader("Your Vehicle")
         col1, col2 = st.columns(2)
         with col1:
-            segment      = st.selectbox("Fahrzeugklasse", list(SEGMENT_MAP.keys()), index=1)
-            antrieb      = st.radio("Antrieb", ["Benzin", "Diesel"], horizontal=True)
-            getriebe     = st.radio("Getriebe", ["Schaltgetriebe", "Automatik"], horizontal=True)
+            body_sel  = st.selectbox(
+                "Body Style",
+                list(BODY_MAP.keys()),
+                index=0,
+                help="Vehicle body type — same categories as AutoScout24 / mobile.de"
+            )
+            antrieb   = st.radio("Fuel Type", ["Petrol", "Diesel"], horizontal=True)
+            getriebe  = st.radio("Gearbox",   ["Manual", "Automatic"], horizontal=True)
         with col2:
-            motorisierung = st.select_slider(
-                "Motorisierung",
-                options=list(MOTOR_MAP.keys()),
-                value="Mittel   (76–130 PS / 56–96 kW)"
+            power_sel = st.select_slider(
+                "Engine Power",
+                options=list(POWER_MAP.keys()),
+                value="76–130 HP (56–96 kW)"
             )
-            st.info(
-                "Basiert auf echten Fahrzeugdaten aus dem ADEME-Datensatz "
-                "(Frankreich 2013, 5.700 unique Konfigurationen nach Deduplication)."
-            )
+            st.markdown("**Segment reference**")
+            for body, (co2_ref, n_ref) in BODY_INFO.items():
+                icon = "👉 " if body == body_sel else "　"
+                st.caption(f"{icon}**{body}:** {co2_ref} median · {n_ref}")
+
         submitted = st.form_submit_button(
-            "CO₂ berechnen & Marken vergleichen 🚀", use_container_width=True
+            "Calculate CO₂ & Compare Brands 🚀", use_container_width=True
         )
 
     if submitted:
-        seg_cfg     = SEGMENT_MAP[segment]
-        kw_range    = MOTOR_MAP[motorisierung]
+        body_val    = BODY_MAP[body_sel]
+        kw_range    = POWER_MAP[power_sel]
         fuel_val    = FUEL_MAP[antrieb]
         gear_prefix = GEAR_MAP[getriebe]
         ps_lo       = round(kw_range[0] * 1.36)
-        ps_hi       = round(kw_range[1] * 1.36)
+        ps_hi       = round(kw_range[1] * 1.36) if kw_range[1] < 600 else None
 
-        # ── Filter: exakt wie Markenvergleich ────────────────────────────────
+        # ── Filter: Body + Fuel + Power + Gearbox ────────────────────────────
         mask = (
+            df_unique["Body"].eq(body_val) &
             df_unique["Fuel"].eq(fuel_val) &
-            df_unique["Body"].isin(seg_cfg["body"]) &
             df_unique["Maximum Power (kW)"].between(kw_range[0], kw_range[1]) &
             df_unique["Gearbox"].astype(str).str.startswith(gear_prefix)
         )
         df_match = df_unique[mask].copy()
 
-        # Fallback 1: ohne Getriebe
+        # Fallback 1: without gearbox filter
         used_gear_filter = True
         if len(df_match) < 5:
             mask2 = (
+                df_unique["Body"].eq(body_val) &
                 df_unique["Fuel"].eq(fuel_val) &
-                df_unique["Body"].isin(seg_cfg["body"]) &
                 df_unique["Maximum Power (kW)"].between(kw_range[0], kw_range[1])
             )
             df_match = df_unique[mask2].copy()
             used_gear_filter = False
 
-        # Fallback 2: ohne Motorisierungsfilter
+        # Fallback 2: without power filter
         used_power_filter = True
         if len(df_match) < 3:
             mask3 = (
-                df_unique["Fuel"].eq(fuel_val) &
-                df_unique["Body"].isin(seg_cfg["body"])
+                df_unique["Body"].eq(body_val) &
+                df_unique["Fuel"].eq(fuel_val)
             )
             df_match = df_unique[mask3].copy()
-            used_gear_filter = False
+            used_gear_filter  = False
             used_power_filter = False
+
 
         co2_vals = df_match["CO2 (g/km)"].dropna()
 
         if len(co2_vals) == 0:
-            st.error("Keine Fahrzeuge gefunden. Bitte andere Konfiguration wählen.")
+            st.error("No vehicles found. Please try a different configuration.")
             st.stop()
 
-        # ── Kennzahlen aus echten Daten ──────────────────────────────────────
+        # ── Key metrics from real data ─────────────────────────────────────
         co2_median = co2_vals.median()
         co2_mean   = co2_vals.mean()
         co2_p25    = co2_vals.quantile(0.25)
@@ -1260,7 +1284,7 @@ with tabs[6]:
         n_match    = len(df_match)
         n_brands   = df_match["Brand"].nunique()
 
-        # Gesamtflotten-Median als Referenz
+        # Fleet-wide median as reference
         fleet_median = df_unique["CO2 (g/km)"].median()
         pct_better   = (df_unique["CO2 (g/km)"] <= co2_median).mean() * 100
         delta_fleet  = co2_median - fleet_median
@@ -1274,35 +1298,33 @@ with tabs[6]:
         color = "green" if co2_median <= 120 else "orange" if co2_median <= 160 else "red"
 
         st.markdown("---")
-        st.subheader("Ergebnis")
+        st.subheader("Result")
 
-        # Filterhinweis
-        filter_info = f"{segment} · {antrieb} · "
+        ps_str = f"{ps_lo}–{ps_hi} HP" if ps_hi else f"{ps_lo}+ HP"
+        filter_info = f"{body_sel} · {antrieb} · {ps_str}"
         if used_gear_filter:
-            filter_info += f"{getriebe} · "
-        if used_power_filter:
-            filter_info += f"{ps_lo}–{ps_hi} PS"
+            filter_info += f" · {getriebe}"
         else:
-            filter_info += "alle PS-Stufen"
-        if not used_gear_filter and len(df_match) > 0:
-            st.caption(f"Hinweis: Getriebe-Filter wurde erweitert (zu wenig Treffer).")
+            filter_info += " · all gearbox types"
+        if not used_gear_filter:
+            st.caption("Note: Gearbox filter was broadened (too few matches).")
         if not used_power_filter:
-            st.caption(f"Hinweis: PS-Filter wurde erweitert (zu wenig Treffer).")
+            st.caption(f"Note: Power filter was broadened — showing all {body_sel} {antrieb} vehicles.")
 
-        # ── Ergebnis-Karte ───────────────────────────────────────────────────
+        # ── Result card ─────────────────────────────────────────────────────
         st.markdown(
             f"<div style='background:{color}22;border-left:6px solid {color};"
             f"padding:20px;border-radius:8px;margin:8px 0;'>"
             f"<h2 style='color:{color};margin:0'>"
             f"🚗 {co2_median:.0f} g CO₂/km <span style='font-size:16px;font-weight:normal'>"
-            f"(Median aus {n_match} echten Fahrzeugen)</span></h2>"
+            f"(Median from {n_match} real vehicles)</span></h2>"
             f"<p style='font-size:16px;margin:6px 0'>"
-            f"EU-Effizienzklasse: <strong>{euro}</strong>"
-            f"&nbsp;·&nbsp; Jahres-CO₂: ca. <strong>{jahres_co2:.0f} kg</strong> "
-            f"(bei 15.000 km/Jahr)</p>"
+            f"EU Efficiency Class: <strong>{euro}</strong>"
+            f"&nbsp;·&nbsp; Annual CO₂: approx. <strong>{jahres_co2:.0f} kg</strong> "
+            f"(at 15,000 km/year)</p>"
             f"<p style='color:gray;font-size:12px;margin:0'>"
-            f"Daten: {filter_info} · {n_brands} Marken · "
-            f"Spanne: {co2_min:.0f}–{co2_max:.0f} g/km"
+            f"Data: {filter_info} · {n_brands} brands · "
+            f"Range: {co2_min:.0f}–{co2_max:.0f} g/km"
             f"</p></div>",
             unsafe_allow_html=True
         )
@@ -1310,31 +1332,31 @@ with tabs[6]:
         # ── 4 Kennzahlen ─────────────────────────────────────────────────────
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Median CO₂", f"{co2_median:.0f} g/km")
-        c2.metric("Spanne (25–75%)", f"{co2_p25:.0f}–{co2_p75:.0f} g/km")
-        c3.metric("vs. Gesamtflotte", f"{delta_fleet:+.0f} g/km",
+        c2.metric("Range (25–75%)", f"{co2_p25:.0f}–{co2_p75:.0f} g/km")
+        c3.metric("vs. Fleet", f"{delta_fleet:+.0f} g/km",
                   delta_color="inverse")
-        c4.metric("Besser als", f"{pct_better:.0f}% aller Fahrzeuge")
+        c4.metric("Better than", f"{pct_better:.0f}% of all vehicles")
 
-        # ── Verteilung im Segment ────────────────────────────────────────────
+        # ── Segment distribution ────────────────────────────────────────────
         fig, ax = plt.subplots(figsize=(10, 3))
         ax.hist(df_unique["CO2 (g/km)"].dropna(), bins=60,
-                color="lightgrey", alpha=0.7, label="Gesamtflotte")
+                color="lightgrey", alpha=0.7, label="All vehicles")
         ax.hist(co2_vals, bins=30, color=color, alpha=0.75,
-                label=f"{segment} · {antrieb} ({n_match} Fzg.)")
+                label=f"{body_sel} · {antrieb} ({n_match} vehicles)")
         ax.axvline(co2_median, color=color, lw=2.5, linestyle="--",
-                   label=f"Segment-Median: {co2_median:.0f} g/km")
+                   label=f"Segment median: {co2_median:.0f} g/km")
         ax.axvline(fleet_median, color="gray", lw=1.5, linestyle=":",
-                   label=f"Flotten-Median: {fleet_median:.0f} g/km")
+                   label=f"Fleet median: {fleet_median:.0f} g/km")
         ax.set_xlabel("CO₂ (g/km)"); ax.set_ylabel("Häufigkeit")
-        ax.set_title("Dein Segment vs. Gesamtflotte")
+        ax.set_title("Your Segment vs. Full Fleet")
         ax.legend(fontsize=9)
         for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
         plt.tight_layout(); st.pyplot(fig); plt.close()
 
-        # ── Markenvergleich ──────────────────────────────────────────────────
+        # ── Brand comparison ────────────────────────────────────────────────
         st.markdown("---")
-        st.subheader("🏷️ Welche Marke ist in diesem Segment am sparsamsten?")
-        st.caption(f"{n_match} Fahrzeuge von {n_brands} Marken · {filter_info}")
+        st.subheader("🏷️ Which brand is most efficient in your segment?")
+        st.caption(f"{n_match} vehicles · {n_brands} brands · {filter_info}")
 
         brand_summary = (
             df_match.groupby("Brand")["CO2 (g/km)"]
@@ -1368,11 +1390,11 @@ with tabs[6]:
                     va="center", fontsize=9)
 
         ax.axvline(co2_median, color="black", lw=1.5, linestyle="--",
-                   label=f"Segment-Median: {co2_median:.0f} g/km")
+                   label=f"Segment median: {co2_median:.0f} g/km")
 
         ax.set_xlabel("Median CO₂ (g/km)")
         ax.set_title(
-            f"Markenvergleich: {segment} · {antrieb} · {getriebe} · {ps_lo}–{ps_hi} PS",
+            f"Brand Comparison: {body_sel} · {antrieb} · {getriebe} · {power_sel}",
             fontsize=12, pad=12
         )
         ax.set_xlim(0, plot_b["CO2_Median"].max() * 1.28)
@@ -1380,25 +1402,25 @@ with tabs[6]:
 
         from matplotlib.patches import Patch
         legend_els = [
-            Patch(facecolor="#2ecc71", label="Top 3 sparsamste Marken"),
-            Patch(facecolor=BLUE,      label="Mittelfeld"),
-            Patch(facecolor="#e74c3c", label="Top 3 höchster CO₂"),
+            Patch(facecolor="#2ecc71", label="Top 3 most efficient brands"),
+            Patch(facecolor=BLUE,      label="Mid-field"),
+            Patch(facecolor="#e74c3c", label="Top 3 highest CO₂"),
             plt.Line2D([0],[0], color="black", lw=1.5, linestyle="--",
-                       label=f"Segment-Median: {co2_median:.0f} g/km"),
+                       label=f"Segment median: {co2_median:.0f} g/km"),
         ]
         ax.legend(handles=legend_els, loc="lower right", fontsize=9)
         plt.tight_layout(); st.pyplot(fig); plt.close()
 
         # ── Top 3 Empfehlungskarten ──────────────────────────────────────────
-        st.subheader("🏆 Top 3 Empfehlungen")
+        st.subheader("🏆 Top 3 Recommendations")
         top3  = brand_summary.head(3)
         cols3 = st.columns(3)
         medals = ["🥇", "🥈", "🥉"]
         for idx, (col_ui, (_, rb)) in enumerate(zip(cols3, top3.iterrows())):
             saving    = co2_median - rb["CO2_Median"]
             saving_kg = saving * 15000 / 1000
-            saving_str = (f"↓ {saving_kg:.0f} kg CO₂/Jahr gespart"
-                          if saving > 1 else "Segment-Median")
+            saving_str = (f"↓ {saving_kg:.0f} kg CO₂/year saved"
+                          if saving > 1 else "At segment median")
             col_ui.markdown(
                 f"<div style='background:#f0fdf4;border:2px solid #2ecc71;"
                 f"padding:16px;border-radius:10px;text-align:center;'>"
@@ -1408,7 +1430,7 @@ with tabs[6]:
                 f"{rb['CO2_Median']:.0f} g/km</div>"
                 f"<div style='font-size:11px;color:gray;margin-top:4px'>"
                 f"Min {rb['CO2_Min']:.0f} · Max {rb['CO2_Max']:.0f} g/km<br>"
-                f"{int(rb['Modelle'])} Modelle im Segment<br>"
+                f"{int(rb['Modelle'])} models in segment<br>"
                 f"<strong>{saving_str}</strong>"
                 f"</div></div>",
                 unsafe_allow_html=True
@@ -1416,7 +1438,7 @@ with tabs[6]:
 
         # ── Detailtabelle ────────────────────────────────────────────────────
         st.markdown("---")
-        with st.expander("📋 Alle gefundenen Fahrzeuge anzeigen"):
+        with st.expander("📋 Show all matching vehicles"):
             show_cols = [c for c in
                          ["Brand", "Folder Model", "Fuel", "Body", "Gearbox",
                           "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
@@ -1425,7 +1447,7 @@ with tabs[6]:
             disp = df_match[show_cols].copy()
             if "Maximum Power (kW)" in disp.columns:
                 disp.insert(disp.columns.get_loc("Maximum Power (kW)")+1,
-                            "PS", (disp["Maximum Power (kW)"] * 1.36).round(0).astype("Int64"))
+                            "HP", (disp["Maximum Power (kW)"] * 1.36).round(0).astype("Int64"))
             st.dataframe(
                 disp.sort_values("CO2 (g/km)").reset_index(drop=True),
                 width="stretch"
