@@ -15,13 +15,8 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 from scipy import stats
-from scipy.stats import mannwhitneyu, pearsonr, spearmanr
-from sklearn.cluster import KMeans
-try:
-    from kmodes.kprototypes import KPrototypes
-    KPROTO_AVAILABLE = True
-except ImportError:
-    KPROTO_AVAILABLE = False
+from scipy.stats import pearsonr, spearmanr
+from kmodes.kprototypes import KPrototypes
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.inspection import PartialDependenceDisplay
@@ -211,8 +206,8 @@ def make_df_unique(df: pd.DataFrame) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def run_clustering(_df: pd.DataFrame, k: int = 4):
     """
-    K-Prototypes clustering (kmodes) for mixed numeric + categorical data.
-    Falls back to KMeans with label-encoding if kmodes is not installed.
+    K-Prototypes clustering for mixed numeric + categorical data.
+    Numeric columns are standardized; categoricals handled natively.
     """
     categorical_cols = [c for c in ['Body', 'Fuel', 'Gearbox'] if c in _df.columns]
     numeric_cols     = [c for c in ['Maximum Power (kW)', 'Empty Mass Euro Avg (kg)'] if c in _df.columns]
@@ -221,41 +216,26 @@ def run_clustering(_df: pd.DataFrame, k: int = 4):
 
     df_c = _df[feature_cols + [target_col]].dropna().copy()
 
-    if KPROTO_AVAILABLE and len(categorical_cols) > 0 and len(numeric_cols) > 0:
-        # ── K-Prototypes: native mixed-data clustering ────────────────────────
-        # Scale numeric columns only
-        scaler = StandardScaler()
-        df_kp = df_c.copy()
-        df_kp[numeric_cols] = scaler.fit_transform(df_kp[numeric_cols])
+    # Scale numeric columns
+    scaler = StandardScaler()
+    df_kp  = df_c.copy()
+    df_kp[numeric_cols] = scaler.fit_transform(df_kp[numeric_cols])
 
-        # Build feature matrix: categoricals must be object dtype
-        for col in categorical_cols:
-            df_kp[col] = df_kp[col].astype(str)
+    # Categoricals must be object dtype for KPrototypes
+    for col in categorical_cols:
+        df_kp[col] = df_kp[col].astype(str)
 
-        X_matrix = df_kp[feature_cols].to_numpy(dtype=object)
-        categorical_idx = [feature_cols.index(col) for col in categorical_cols]
+    X_matrix       = df_kp[feature_cols].to_numpy(dtype=object)
+    categorical_idx = [feature_cols.index(col) for col in categorical_cols]
 
-        kproto = KPrototypes(
-            n_clusters=k,
-            init='Cao',
-            n_init=5,
-            verbose=0,
-            random_state=RANDOM_STATE
-        )
-        df_c['Cluster'] = kproto.fit_predict(X_matrix, categorical=categorical_idx)
-
-    else:
-        # ── Fallback: KMeans with label-encoding ──────────────────────────────
-        scaler = StandardScaler()
-        df_scaled = df_c.copy()
-        df_scaled[numeric_cols] = scaler.fit_transform(df_scaled[numeric_cols])
-        for col in categorical_cols:
-            le = LabelEncoder()
-            df_scaled[col] = le.fit_transform(df_scaled[col].astype(str))
-        X = df_scaled[feature_cols].values
-        km = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=10)
-        df_c['Cluster'] = km.fit_predict(X)
-
+    kproto = KPrototypes(
+        n_clusters=k,
+        init='Cao',
+        n_init=5,
+        verbose=0,
+        random_state=RANDOM_STATE
+    )
+    df_c['Cluster'] = kproto.fit_predict(X_matrix, categorical=categorical_idx)
     return df_c
 
 
@@ -599,40 +579,6 @@ with tabs[2]:
     sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax[1])
     ax[1].set_title('Spearman Correlation Heatmap (Numeric-Only)')
     plt.tight_layout(); st.pyplot(fig); plt.close()
-
-    st.markdown("---")
-
-    # Mann-Whitney Test
-    st.subheader("Statistical Hypothesis Testing")
-    petrol_co2 = df[df['Fuel'] == 'ES']['CO2 (g/km)'].dropna()
-    diesel_co2 = df[df['Fuel'] == 'GO']['CO2 (g/km)'].dropna()
-
-    if len(petrol_co2) > 0 and len(diesel_co2) > 0:
-        stat_mw, p_val = mannwhitneyu(petrol_co2, diesel_co2, alternative='two-sided')
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Ø CO₂ Petrol (ES)", f"{petrol_co2.mean():.1f} g/km")
-        c2.metric("Ø CO₂ Diesel (GO)", f"{diesel_co2.mean():.1f} g/km")
-        c3.metric("Mann-Whitney p-Wert", f"{p_val:.2e}")
-        if p_val < 0.05:
-            st.success(f"✅ Signifikanter Unterschied (p < 0.05) – U-Statistik: {stat_mw:.0f}")
-        else:
-            st.warning("Kein signifikanter Unterschied.")
-
-    st.markdown("---")
-
-    # Correlation significance: Power & Mass vs CO2
-    st.subheader("Correlation Significance: Power & Mass vs CO₂")
-    corr_results = []
-    for var in ['Maximum Power (kW)', 'Empty Mass Euro Avg (kg)']:
-        if var in df.columns:
-            d = df[[var, 'CO2 (g/km)']].dropna()
-            pc, pp = pearsonr(d[var], d['CO2 (g/km)'])
-            sc, sp = spearmanr(d[var], d['CO2 (g/km)'])
-            corr_results.append({"Variable": var,
-                                  "Pearson r": round(pc, 4), "Pearson p": f"{pp:.2e}",
-                                  "Spearman r": round(sc, 4), "Spearman p": f"{sp:.2e}"})
-    if corr_results:
-        st.dataframe(pd.DataFrame(corr_results), width='stretch')
 
     st.markdown("---")
 
