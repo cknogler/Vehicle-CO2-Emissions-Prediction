@@ -854,6 +854,28 @@ with tabs[4]:
     plt.subplots_adjust(hspace=0.5, wspace=0.35)
     st.pyplot(fig); plt.close()
 
+    # ── Cluster-Interpretation ────────────────────────────────────────────────
+    st.markdown("#### Interpretation der Cluster")
+    st.markdown("""
+    Aus den Grafiken lassen sich **vier distinkte Fahrzeugsegmente** ablesen:
+
+    | Cluster | Größe | Ø CO₂ | Profil |
+    |---------|-------|--------|--------|
+    | **0** | ~2.400 (42%) | ~148 g/km | Leichte Mittelklasse — niedrige Masse & Leistung, unter Flottenø |
+    | **1** | ~1.430 (25%) | ~210 g/km | Schwere Nutzfahrzeuge — hohe Masse, überwiegend Diesel, stark über Flottenø |
+    | **2** | ~1.130 (20%) | ~126 g/km | **Effizienzcluster** — niedrigste CO₂-Werte, leichte Benziner |
+    | **3** | ~740 (13%)   | ~243 g/km | Hochleistungsfahrzeuge — höchste Leistung & Masse, weiteste Streuung |
+
+    **Flottenø: 171.3 g/km** — Cluster 0 und 2 liegen deutlich darunter, Cluster 1 und 3 darüber.
+
+    **Antwort auf die Forschungsfrage:** Ja, es lassen sich natürliche Fahrzeugsegmente identifizieren.
+    Der stärkste Treiber der Clusterzugehörigkeit ist die Kombination aus **Masse und Leistung** —
+    sichtbar im Power-vs-Mass-Scatterplot. Kraftstoffart und Karosserie differenzieren zusätzlich:
+    Cluster 2 (Effizienz) ist stark Benzin-dominiert, Cluster 1 (Nutzfahrzeuge) fast ausschließlich Diesel.
+    """)
+
+    st.markdown("---")
+
     # Categorical distribution per cluster (wie im Notebook)
     st.subheader("Categorical Distribution per Cluster")
     cat_cols_clust = [c for c in ['Body', 'Fuel', 'Gearbox'] if c in df_cluster_raw.columns]
@@ -869,6 +891,16 @@ with tabs[4]:
         axes[i].legend(title=feature, bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=8)
     plt.tight_layout(rect=[0, 0, 0.9, 1])
     st.pyplot(fig); plt.close()
+
+    st.caption(
+        "Interpretation: Cluster 2 ist fast ausschließlich Benzin (ES) — der Effizienzcluster "
+        "besteht hauptsächlich aus leichten Benzin-Limousinen mit Schaltgetriebe (M 5/M 6). "
+        "Cluster 1 ist nahezu vollständig Diesel (GO) — schwere Minibuse und Transporter "
+        "dominieren dieses Segment. Cluster 3 zeigt die breiteste Karosserie-Vielfalt "
+        "(Berline, Break, TS TERRAINS/CHEMINS) — typisch für Hochleistungsfahrzeuge quer durch alle Klassen."
+    )
+
+    st.markdown("---")
 
     # Radar + Heatmap (wie im Notebook)
     st.subheader("Cluster Profiles – Radar & Heatmap")
@@ -921,6 +953,16 @@ with tabs[4]:
 
     fig.suptitle("Vehicle Cluster Profiles Dashboard", fontsize=16, y=1.02)
     st.pyplot(fig); plt.close()
+
+    st.caption(
+        "Radar & Heatmap zeigen normalisierte Werte (0=Minimum, 1=Maximum des Datensatzes). "
+        "Cluster 3 hat die höchsten normalisierten Werte in allen drei Dimensionen (Power=0.50, Mass=0.47, CO₂=0.33) "
+        "— das ist das Hochleistungssegment. "
+        "Cluster 2 hat die niedrigsten Werte (Power=0.07, Mass=0.18, CO₂=0.09) "
+        "— das ist der Effizienzcluster. "
+        "Cluster 1 fällt durch einen ungewöhnlich hohen Mass-Wert (0.67) bei moderater Leistung (0.13) auf "
+        "— typisch für schwere Nutzfahrzeuge mit Dieselmotor."
+    )
 
 
 # ═══════════════════════ TAB 5 – PREDICTION ══════════════════════════════════
