@@ -830,8 +830,8 @@ with tabs[3]:
         IQR = Q3 - Q1
         outliers = df_unique[(df_unique[col_name] < Q1 - 1.5*IQR) |
                               (df_unique[col_name] > Q3 + 1.5*IQR)]
-        st.markdown(f"**{col_name}**: {len(outliers)} Ausreißer "
-                    f"(Grenze: >{Q3 + 1.5*IQR:.1f} oder <{Q1 - 1.5*IQR:.1f})")
+        st.markdown(f"**{col_name}**: {len(outliers)} outliers "
+                    f"(IQR bounds: >{Q3 + 1.5*IQR:.1f} or <{Q1 - 1.5*IQR:.1f})")
 
     st.subheader("Top 5 Redundant Mechanical Bases")
     st.dataframe(df_unique.head(5), width='stretch')
