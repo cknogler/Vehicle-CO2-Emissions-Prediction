@@ -704,6 +704,47 @@ with tabs[2]:
 with tabs[3]:
     st.header("📉 Data Deduplication – Unique Mechanical Configurations")
 
+    st.markdown("""
+    ### Why deduplicate?
+
+    The raw ADEME dataset contains **44,850 records** — but most of them are not unique vehicles.
+    The same mechanical configuration (e.g. a Mercedes Viano 2.2 CDI with 120 kW, 2,130 kg,
+    manual 6-speed, 200 g/km CO₂) appears hundreds of times under different trim names,
+    option packages or registration variants. Including these duplicates would **bias every
+    statistical analysis and machine learning model** towards the most common configurations
+    (in this dataset: Mercedes-Benz Minibuses dominate ~86% of raw records).
+
+    ### How it works — three steps
+
+    **Step 1 — Fuel filter:**
+    Only petrol (`ES`) and diesel (`GO`) vehicles are kept. Electric, hybrid and gas
+    vehicles are excluded because they follow fundamentally different emission physics
+    and would require separate models. This reduces the dataset from **44,850 → 43,935 records**.
+
+    **Step 2 — Define a unique mechanical configuration:**
+    A vehicle is considered unique if it has a distinct combination of:
+    `Brand · Folder Model · Fuel · Body · Gearbox · Maximum Power (kW) ·
+    Empty Mass Euro Avg (kg) · CO₂ (g/km) · Combined Consumption (l/100km) · Range`
+
+    This means: two cars with identical technical parameters but different commercial
+    names (e.g. "Viano Trend" vs "Viano Ambiente") count as **one configuration**.
+
+    **Step 3 — Group and count:**
+    For each unique configuration, the number of duplicate rows (`Clone_Count`) is recorded.
+    The resulting dataset contains **5,700 unique mechanical configurations** —
+    the true analytical unit for understanding CO₂ emissions.
+
+    > **Result:** {redundancy_pct:.1f}% of the filtered dataset were duplicates.
+    > The most redundant configuration appeared **{top_clone:,} times** in the raw data.
+    """.format(
+        redundancy_pct=(len(df[df["Fuel"].isin(["ES","GO"])]) - len(df_unique)) /
+                        len(df[df["Fuel"].isin(["ES","GO"])]) * 100
+                        if len(df[df["Fuel"].isin(["ES","GO"])]) > 0 else 0,
+        top_clone=int(df_unique["Clone_Count"].iloc[0]) if len(df_unique) > 0 else 0
+    ))
+
+    st.markdown("---")
+
     total_obs    = len(df)
     filtered_obs = len(df_combus)
     unique_designs = len(df_unique)
