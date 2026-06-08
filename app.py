@@ -386,7 +386,7 @@ with st.sidebar:
 tabs = st.tabs([
     "📋 Preprocessing",
     "📊 EDA",
-    "🔗 Korrelationen",
+    "🔗 Correlation Analysis",
     "📉 Deduplication",
     "🔵 Clustering",
     "🤖 Prediction",
@@ -745,21 +745,29 @@ with tabs[3]:
 
     st.markdown("---")
 
-    total_obs    = len(df)
-    filtered_obs = len(df_combus)
-    unique_designs = len(df_unique)
-    filtered_out   = total_obs - filtered_obs
+    # ── Key metrics ──────────────────────────────────────────────────────────
+    # total_obs      : all records in the raw dataset (all fuel types)
+    # filtered_obs   : after keeping only petrol (ES) + diesel (GO)
+    # unique_designs : after groupby on UNIQUE_COLS — the true analytical unit
+    # redundancy_pct : share of filtered records that were duplicates
+    # top_clone      : largest Clone_Count — most repeated configuration
+    total_obs          = len(df)
+    filtered_obs       = len(df_combus)
+    unique_designs     = len(df_unique)
+    filtered_out       = total_obs - filtered_obs
     duplicates_removed = filtered_obs - unique_designs
-    redundancy_pct = (duplicates_removed / filtered_obs * 100) if filtered_obs > 0 else 0
-    top_clone = int(df_unique['Clone_Count'].iloc[0]) if len(df_unique) > 0 else 0
+    redundancy_pct     = (duplicates_removed / filtered_obs * 100) if filtered_obs > 0 else 0
+    top_clone          = int(df_unique['Clone_Count'].iloc[0]) if len(df_unique) > 0 else 0
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Records", f"{total_obs:,}")
-    c2.metric("ES+GO Filter", f"{filtered_obs:,}")
-    c3.metric("Unique Designs", f"{unique_designs:,}")
-    c4.metric("Redundancy Rate", f"{redundancy_pct:.1f}%")
+    c1.metric("Total Records",    f"{total_obs:,}")
+    c2.metric("ES+GO Filter",     f"{filtered_obs:,}")
+    c3.metric("Unique Designs",   f"{unique_designs:,}")
+    c4.metric("Redundancy Rate",  f"{redundancy_pct:.1f}%")
 
-    # Bar chart: Engineering Fleet Diversity (wie im Notebook)
+    # ── Bar chart: Engineering Fleet Diversity ───────────────────────────────
+    # Visualises the reduction from raw records → unique mechanical designs.
+    # The annotation box shows redundancy %, unique count and total count.
     fig, ax = plt.subplots(figsize=(10, 6))
     categories = ['Total Records in Data', 'Unique Mechanical Designs']
     values = [total_obs, unique_designs]
@@ -776,7 +784,11 @@ with tabs[3]:
     ax.set_ylim(0, total_obs * 1.15)
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
-    # CO2 after dedup (2x2)
+    # ── CO₂ analysis after deduplication ────────────────────────────────────
+    # Re-plots the CO₂ distribution on df_unique instead of df_combus.
+    # Removing duplicates shifts the distribution: the mean drops because
+    # Mercedes-Benz Minibus clones (high CO₂, high Clone_Count) are collapsed
+    # into single rows — revealing the true spread across vehicle types.
     st.subheader("CO₂ Analysis after Deduplication")
     fig, axes = plt.subplots(2, 2, figsize=(16, 8))
     fig.suptitle('CO2 Emissions Analysis (Deduplicated Data)', fontsize=16, fontweight='bold')
@@ -804,7 +816,11 @@ with tabs[3]:
                    bbox=dict(facecolor='white', alpha=0.8))
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
-    # Outlier analysis
+    # ── Outlier analysis (IQR method) ────────────────────────────────────────
+    # IQR (Interquartile Range) method: outliers are values below Q1 - 1.5×IQR
+    # or above Q3 + 1.5×IQR.  Applied separately to CO₂, Power and Mass.
+    # Outliers are NOT removed — they are real vehicles (e.g. Lexus LFA, 379 g/km).
+    # They are documented here for transparency and to inform model interpretation.
     st.subheader("Outlier Analysis (IQR Method)")
     for col_name in ['CO2 (g/km)', 'Maximum Power (kW)', 'Empty Mass Euro Avg (kg)']:
         if col_name not in df_unique.columns:
