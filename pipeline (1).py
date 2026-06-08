@@ -429,4 +429,4 @@ if __name__ == "__main__":
     parser.add_argument("--k",      type=int, default=4,
                         help="Number of clusters for K-Prototypes (default: 4)")
     args = parser.parse_args()
-    run_pipeline(args.data, args.output, args.k)
+    run_pipeline(args.data, args.output, args.k) 
