@@ -1,4 +1,4 @@
-# Vehicle CO₂ Emissions Prediction
+# 🚗 Vehicle CO₂ Emissions Prediction
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://vehicle-co2-cknogler.streamlit.app)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://www.python.org/)
@@ -9,7 +9,7 @@ An end-to-end data science project analysing the **ADEME Car Labelling Dataset**
 
 ---
 
-##  Table of Contents
+## 📋 Table of Contents
 
 - [Project Overview](#project-overview)
 - [Research Questions](#research-questions)
@@ -73,13 +73,13 @@ The interactive Streamlit app is structured across seven tabs:
 
 | Tab | Content |
 |-----|---------|
-|  **Preprocessing** | Missing value heatmap, dataset summary, data cleaning steps |
-|  **EDA** | Fleet distribution, primary CO₂ drivers, boxplots by category |
-|  **Correlation Analysis** | Pearson vs. Spearman heatmap, scatter plots with regression lines, hexbin density plots |
-|  **Deduplication** | Engineering fleet diversity infographic, outlier analysis (IQR), CO₂ before/after deduplication |
-|  **Clustering** | Elbow method, K-Prototypes (k=4), cluster profiles (radar + heatmap), categorical distribution |
-|  **Prediction** | Feature set comparison (5-fold CV), model performance (R² / MAE), feature importance, partial dependence plots |
-|  **CO₂ Calculator** | Consumer-facing tool: segment, fuel, gearbox, power → median CO₂ from real data + brand comparison |
+| 📋 **Preprocessing** | Missing value heatmap, dataset summary, data cleaning steps |
+| 📊 **EDA** | Fleet distribution, primary CO₂ drivers, boxplots by category |
+| 🔗 **Correlation Analysis** | Pearson vs. Spearman heatmap, scatter plots with regression lines, hexbin density plots |
+| 📉 **Deduplication** | Engineering fleet diversity infographic, outlier analysis (IQR), CO₂ before/after deduplication |
+| 🔵 **Clustering** | Elbow method, K-Prototypes (k=4), cluster profiles (radar + heatmap), categorical distribution |
+| 🤖 **Prediction** | Feature set comparison (5-fold CV), model performance (R² / MAE), feature importance, partial dependence plots |
+| 🎯 **CO₂ Calculator** | Consumer-facing tool: segment, fuel, gearbox, power → median CO₂ from real data + brand comparison |
 
 ---
 
@@ -233,7 +233,7 @@ The pipeline outputs:
 
 ## Author
 
-**Christian Knogler** & **Jan Armbruster**
-
+**Christian Knogler**
+Data Analyst · Munich, Germany
 
 [![GitHub](https://img.shields.io/badge/GitHub-cknogler-black?logo=github)](https://github.com/cknogler)
