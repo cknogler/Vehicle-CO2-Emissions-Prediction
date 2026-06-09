@@ -233,7 +233,6 @@ The pipeline outputs:
 
 ## Author
 
-**Christian Knogler**
-Data Analyst · Munich, Germany
+**Christian Knogler** & **Jan Armbruster**
 
 [![GitHub](https://img.shields.io/badge/GitHub-cknogler-black?logo=github)](https://github.com/cknogler)
