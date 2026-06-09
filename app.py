@@ -1622,7 +1622,8 @@ with tabs[6]:
 
         # Fleet-wide median as reference
         fleet_median = df_unique["CO2 (g/km)"].median()
-        pct_better   = (df_unique["CO2 (g/km)"] <= co2_median).mean() * 100
+        # "Better than X%" = X% of fleet has MORE CO2 than your segment
+        pct_better   = (df_unique["CO2 (g/km)"] > co2_median).mean() * 100
         delta_fleet  = co2_median - fleet_median
         jahres_co2   = co2_median * 15000 / 1000
 
@@ -1683,7 +1684,7 @@ with tabs[6]:
                    label=f"Segment median: {co2_median:.0f} g/km")
         ax.axvline(fleet_median, color="gray", lw=1.5, linestyle=":",
                    label=f"Fleet median: {fleet_median:.0f} g/km")
-        ax.set_xlabel("CO₂ (g/km)"); ax.set_ylabel("Häufigkeit")
+        ax.set_xlabel("CO₂ (g/km)"); ax.set_ylabel("Frequency")
         ax.set_title("Your Segment vs. Full Fleet")
         ax.legend(fontsize=9)
         for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
