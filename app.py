@@ -360,7 +360,7 @@ with st.sidebar:
     st.markdown("**ADEME Car Labelling Dataset**")
     st.markdown("---")
     st.caption("Dataset is loaded automatically from the repository.")
-    uploaded = st.file_uploader("Eigene CSV hochladen (optional)", type=["csv"])
+    uploaded = st.file_uploader("Upload your own CSV (optional)", type=["csv"])
     st.markdown("---")
     st.markdown("**Projekt:** [GitHub ↗](https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction)",
                 unsafe_allow_html=True)
@@ -397,17 +397,78 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("📋 Preprocessing & Dataset Overview")
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Rows", f"{len(df):,}")
-    c2.metric("Spalten", len(df.columns))
+    st.markdown("""
+    This tab documents every transformation applied to the raw ADEME dataset
+    before analysis. Preprocessing is a critical step — raw data is rarely
+    analysis-ready and hidden issues (missing values, wrong data types,
+    duplicate entries) can silently bias every downstream result.
+    """)
+
+    # ── 1. Dataset at a glance ────────────────────────────────────────────────
+    st.subheader("1️⃣ Dataset at a Glance")
     n_esgo = len(df_combus)
-    c3.metric("ES+GO Vehicles", f"{n_esgo:,}")
-    c4.metric("Unique Configurations", f"{len(df_unique):,}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Rows",           f"{len(df):,}")
+    c2.metric("Columns",              len(df.columns))
+    c3.metric("ES+GO Vehicles",       f"{n_esgo:,}")
+    c4.metric("Unique Configurations",f"{len(df_unique):,}")
 
+    st.markdown("""
+    **Source:** ADEME Car Labelling Dataset — official French vehicle emission registry (2013).
+    Contains all vehicles type-approved for sale in France, including passenger cars,
+    vans, and electric vehicles. All column names were translated from French to English.
+    """)
+
+    # ── 2. Preprocessing pipeline ────────────────────────────────────────────
     st.markdown("---")
+    st.subheader("2️⃣ Preprocessing Pipeline")
 
-    # Missing values heatmap + barplot (wie im Notebook)
-    st.subheader("Missing Values")
+    steps = [
+        ("🏷️ Column Renaming",
+         "All 25 French column names were mapped to English equivalents "
+         "(e.g. `Marque` → `Brand`, `gamme` → `Range`, `Carrosserie` → `Body`). "
+         "This ensures consistency across the entire analysis."),
+        ("⚕️ HC/NOX Imputation",
+         "34,447 values for `HC (g/km)` were missing. These were recovered "
+         "algebraically: `HC = HC+NOX − NOX` and `NOX = HC+NOX − HC`. "
+         "This reduced missing pollutant data from 34,447 to 303 rows."),
+        ("🔧 Gearbox Code Fix",
+         "Two erroneous gearbox codes were corrected: `N 0` and `N 1` → `A 0` "
+         "(Automatic), `S 6` → `D 6` (Dual-Clutch). These were data entry errors "
+         "in the original registry."),
+        ("⚡ Electric Vehicle Treatment",
+         "39 electric vehicles (Fuel = `EL`) had NaN values for all emission and "
+         "consumption columns. These were set to 0, which is correct — EVs have "
+         "no tailpipe emissions."),
+        ("⚖️ Average Kerb Weight",
+         "The dataset provides minimum and maximum kerb weight separately. "
+         "These were merged into a single `Empty Mass Euro Avg (kg)` = (min + max) / 2, "
+         "and the original columns were dropped."),
+        ("⚙️ Gearbox Split",
+         "The `Gearbox` column contains codes like `A 6` (Automatic, 6 gears). "
+         "This was split into two features: `GearType` (Manual / Automatic / CVT / DCT) "
+         "and `GearCount` (4–8, numerical). This prevents the model from treating "
+         "`A 6` and `A 7` as completely unrelated categories."),
+        ("🔢 Numeric Type Coercion",
+         "Four key columns (`CO2 (g/km)`, `Combined Consumption`, `Maximum Power`, "
+         "`Empty Mass Euro Avg`) were explicitly cast to `float64` using "
+         "`pd.to_numeric(..., errors='coerce')` to handle any non-numeric entries."),
+    ]
+
+    for icon_title, explanation in steps:
+        with st.expander(icon_title):
+            st.markdown(explanation)
+
+    # ── 3. Missing values ────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("3️⃣ Missing Values Analysis")
+    st.markdown(
+        "The heatmap shows the **pattern** of missing values (blue = missing) — "
+        "if missing values cluster in rows, it suggests systematic gaps "
+        "(e.g. all EVs missing emission data). "
+        "The bar chart shows the **count** per column."
+    )
+
     missing_values = df.isnull().sum()
     missing_sorted = missing_values[missing_values > 0].sort_values(ascending=False)
 
@@ -420,28 +481,59 @@ with tabs[0]:
         sns.heatmap(df[cols_with_na].isna(), cmap=cmap_mv, cbar=False,
                     yticklabels=False, ax=axes[0])
         axes[0].set_title("Missing Values Pattern (Blue = Missing)")
-        axes[0].tick_params(axis='x', rotation=90)
+        axes[0].tick_params(axis="x", rotation=90)
 
         sns.barplot(x=missing_sorted.index, y=missing_sorted.values,
                     color=BLUE, ax=axes[1])
         axes[1].set_title("Number of Missing Values per Column")
-        axes[1].tick_params(axis='x', rotation=90)
+        axes[1].tick_params(axis="x", rotation=90)
 
         plt.tight_layout()
         st.pyplot(fig); plt.close()
+
+        st.caption(
+            f"Remaining missing values after imputation: "
+            f"{missing_sorted.sum():,} across {len(missing_sorted)} columns. "
+            "Most are pollutant measurements (HC, NOX, Particles) for vehicles "
+            "that were not subject to those tests — not imputed, treated as NaN."
+        )
     else:
         st.success("No missing values after preprocessing!")
 
+    # ── 4. Column overview ───────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("Dataset Summary")
-    desc = df.describe(include='all').T
-    # Only format numeric columns to avoid ValueError on string columns
-    num_cols_desc = desc.select_dtypes(include='number').columns.tolist()
-    fmt = {c: "{:.2f}" for c in num_cols_desc}
-    st.dataframe(desc.style.format(fmt, na_rep="-"), width='stretch')
+    st.subheader("4️⃣ Column Overview")
+    col_info = []
+    for col in df.columns:
+        dtype  = str(df[col].dtype)
+        n_null = df[col].isnull().sum()
+        n_uniq = df[col].nunique()
+        if df[col].dtype in [np.float64, np.int64]:
+            summary = f"min={df[col].min():.1f} / mean={df[col].mean():.1f} / max={df[col].max():.1f}"
+        else:
+            top = df[col].value_counts().index[0] if n_uniq > 0 else "—"
+            summary = f"Top: {top} ({df[col].value_counts().iloc[0]:,}x)"
+        col_info.append({
+            "Column": col, "Type": dtype,
+            "Missing": n_null, "Unique": n_uniq, "Summary": summary
+        })
+    col_df = pd.DataFrame(col_info)
+    st.dataframe(col_df, width="stretch")
 
-    st.subheader("First Rows")
-    st.dataframe(df.head(10), width='stretch')
+    # ── 5. Dataset Summary ───────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("5️⃣ Descriptive Statistics")
+    st.markdown("Statistical summary of all numeric columns after preprocessing.")
+    desc = df.describe(include="all").T
+    num_cols_desc = desc.select_dtypes(include="number").columns.tolist()
+    fmt = {c: "{:.2f}" for c in num_cols_desc}
+    st.dataframe(desc.style.format(fmt, na_rep="-"), width="stretch")
+
+    # ── 6. First rows ────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("6️⃣ Sample Data (First 10 Rows)")
+    st.markdown("Preprocessed dataset after all transformations — ready for analysis.")
+    st.dataframe(df.head(10), width="stretch")
 
 
 # ═══════════════════════ TAB 1 – EDA ═════════════════════════════════════════
