@@ -1210,6 +1210,193 @@ with tabs[5]:
 
 
 
+    # ── 5. What-If Simulator ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("5️⃣ What-If Simulator — Live Model Interaction")
+    st.markdown(
+        "Adjust individual vehicle features using the sliders below. "
+        "The model recalculates the predicted CO₂ in **real time**, showing "
+        "the isolated effect of each parameter. All other features are held constant "
+        "at the **dataset median / mode** (the typical vehicle in the dataset)."
+    )
+
+    # ── Base values (dataset median/mode) ────────────────────────────────────
+    base_mass    = float(df_unique["Empty Mass Euro Avg (kg)"].median())
+    base_power   = float(df_unique["Maximum Power (kW)"].median())
+    base_gears   = float(df_unique["GearCount"].median()) if "GearCount" in df_unique.columns else 6.0
+    base_fuel    = str(df_unique["Fuel"].mode().iloc[0]) if "Fuel" in df_unique.columns else "GO"
+    base_body    = str(df_unique["Body"].mode().iloc[0]) if "Body" in df_unique.columns else "BERLINE"
+    base_gtype   = str(df_unique["GearType"].mode().iloc[0]) if "GearType" in df_unique.columns else "Manual"
+
+    # Build base row for all feature cols
+    base_row = {}
+    for f in feature_cols:
+        if f == "Empty Mass Euro Avg (kg)": base_row[f] = base_mass
+        elif f == "Maximum Power (kW)":     base_row[f] = base_power
+        elif f == "GearCount":              base_row[f] = base_gears
+        elif f == "Fuel":                   base_row[f] = base_fuel
+        elif f == "Body":                   base_row[f] = base_body
+        elif f == "GearType":               base_row[f] = base_gtype
+        else:                               base_row[f] = 0
+
+    base_pred = float(fitted[best_model_name].predict(pd.DataFrame([base_row]))[0])
+
+    st.caption(
+        f"Base vehicle: {base_mass:.0f} kg · {base_power:.0f} kW "
+        f"({base_power*1.36:.0f} HP) · {base_fuel} · {base_body} · "
+        f"{base_gtype} · {base_gears:.0f} gears → "
+        f"**Base CO₂: {base_pred:.1f} g/km**"
+    )
+
+    st.markdown("---")
+
+    # ── Sliders ───────────────────────────────────────────────────────────────
+    col_sliders, col_result = st.columns([2, 1])
+
+    with col_sliders:
+        sim_mass = st.slider(
+            "Empty Mass (kg)",
+            min_value=800, max_value=3200,
+            value=int(base_mass), step=50,
+            help=f"Dataset median: {base_mass:.0f} kg"
+        )
+        sim_power = st.slider(
+            "Maximum Power (kW)",
+            min_value=40, max_value=560,
+            value=int(base_power), step=5,
+            help=f"Dataset median: {base_power:.0f} kW ({base_power*1.36:.0f} HP)"
+        )
+        if "GearCount" in feature_cols:
+            sim_gears = st.slider(
+                "Number of Gears",
+                min_value=4, max_value=8,
+                value=int(base_gears), step=1,
+                help=f"Dataset median: {base_gears:.0f} gears"
+            )
+        else:
+            sim_gears = base_gears
+
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            sim_fuel = st.selectbox(
+                "Fuel", ["GO", "ES"],
+                index=0 if base_fuel == "GO" else 1
+            )
+        with col_b:
+            sim_gtype = st.selectbox(
+                "Gearbox Type", ["Manual", "Automatic", "CVT", "DCT"],
+                index=["Manual","Automatic","CVT","DCT"].index(base_gtype)
+                      if base_gtype in ["Manual","Automatic","CVT","DCT"] else 0
+            )
+        with col_c:
+            body_opts = sorted(df_unique["Body"].dropna().unique().tolist())                         if "Body" in df_unique.columns else ["BERLINE"]
+            sim_body = st.selectbox(
+                "Body Style", body_opts,
+                index=body_opts.index(base_body) if base_body in body_opts else 0
+            )
+
+    # ── Prediction ────────────────────────────────────────────────────────────
+    sim_row = {}
+    for f in feature_cols:
+        if f == "Empty Mass Euro Avg (kg)": sim_row[f] = float(sim_mass)
+        elif f == "Maximum Power (kW)":     sim_row[f] = float(sim_power)
+        elif f == "GearCount":              sim_row[f] = float(sim_gears)
+        elif f == "Fuel":                   sim_row[f] = sim_fuel
+        elif f == "Body":                   sim_row[f] = sim_body
+        elif f == "GearType":               sim_row[f] = sim_gtype
+        else:                               sim_row[f] = 0
+
+    sim_pred  = float(fitted[best_model_name].predict(pd.DataFrame([sim_row]))[0])
+    delta_co2 = sim_pred - base_pred
+    delta_mass  = sim_mass  - base_mass
+    delta_power = sim_power - base_power
+    delta_col   = "red" if delta_co2 > 0 else "green" if delta_co2 < 0 else "gray"
+
+    with col_result:
+        st.markdown("#### Predicted CO₂")
+        euro_sim = ("A (≤100)"  if sim_pred <= 100 else
+                    "B (101–120)" if sim_pred <= 120 else
+                    "C (121–140)" if sim_pred <= 140 else
+                    "D (141–160)" if sim_pred <= 160 else
+                    "E (161–200)" if sim_pred <= 200 else "F/G (>200)")
+        box_color = "green" if sim_pred <= 120 else "orange" if sim_pred <= 160 else "red"
+
+        st.markdown(
+            f"<div style='background:{box_color}22;border-left:5px solid {box_color};"
+            f"padding:16px;border-radius:8px;text-align:center;'>"
+            f"<div style='font-size:36px;font-weight:bold;color:{box_color}'>"
+            f"{sim_pred:.1f} g/km</div>"
+            f"<div style='font-size:14px;color:gray'>{euro_sim}</div>"
+            f"<div style='font-size:18px;color:{delta_col};margin-top:8px'>"
+            f"{'▲' if delta_co2 > 0 else '▼' if delta_co2 < 0 else '='} "
+            f"{delta_co2:+.1f} g/km vs base</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        st.markdown(" ")
+        st.metric("Mass change",  f"{delta_mass:+.0f} kg")
+        st.metric("Power change", f"{delta_power:+.0f} kW ({delta_power*1.36:+.0f} HP)")
+        st.metric("CO₂ change",   f"{delta_co2:+.1f} g/km",
+                  delta_color="inverse")
+
+    # ── Sensitivity Chart ────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("##### Sensitivity: How does CO₂ change as you vary each feature?")
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4))
+
+    # Mass sensitivity
+    mass_range = np.arange(800, 3300, 100)
+    mass_preds = []
+    for m in mass_range:
+        r = sim_row.copy()
+        r["Empty Mass Euro Avg (kg)"] = float(m)
+        mass_preds.append(float(fitted[best_model_name].predict(pd.DataFrame([r]))[0]))
+
+    axes[0].plot(mass_range, mass_preds, color=BLUE, lw=2)
+    axes[0].axvline(sim_mass, color="red", lw=1.5, linestyle="--",
+                    label=f"Current: {sim_mass} kg → {sim_pred:.0f} g/km")
+    axes[0].axvline(base_mass, color="gray", lw=1, linestyle=":",
+                    label=f"Base: {base_mass:.0f} kg")
+    axes[0].set_xlabel("Empty Mass (kg)")
+    axes[0].set_ylabel("Predicted CO₂ (g/km)")
+    axes[0].set_title("CO₂ vs. Mass (all other features fixed)")
+    axes[0].legend(fontsize=8)
+    for sp in ["top","right"]: axes[0].spines[sp].set_visible(False)
+
+    # Power sensitivity
+    power_range = np.arange(40, 570, 10)
+    power_preds = []
+    for p in power_range:
+        r = sim_row.copy()
+        r["Maximum Power (kW)"] = float(p)
+        power_preds.append(float(fitted[best_model_name].predict(pd.DataFrame([r]))[0]))
+
+    axes[1].plot(power_range, power_preds, color="#e67e22", lw=2)
+    axes[1].axvline(sim_power, color="red", lw=1.5, linestyle="--",
+                    label=f"Current: {sim_power} kW → {sim_pred:.0f} g/km")
+    axes[1].axvline(base_power, color="gray", lw=1, linestyle=":",
+                    label=f"Base: {base_power:.0f} kW")
+    axes[1].set_xlabel("Maximum Power (kW)")
+    axes[1].set_ylabel("Predicted CO₂ (g/km)")
+    axes[1].set_title("CO₂ vs. Power (all other features fixed)")
+    axes[1].legend(fontsize=8)
+    for sp in ["top","right"]: axes[1].spines[sp].set_visible(False)
+
+    plt.tight_layout()
+    st.pyplot(fig)
+    plt.close()
+
+    st.caption(
+        f"Model: {best_model_name} · Feature set: {best_fs} · "
+        f"Test MAE ≈ {results_df.iloc[0]['Test_MAE']:.1f} g/km. "
+        "Sensitivity curves show the non-linear effect of each feature "
+        "while holding all others constant (ceteris paribus)."
+    )
+
+
+
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
     st.header("🎯 CO₂ Calculator & Brand Comparison")
