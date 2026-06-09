@@ -339,7 +339,7 @@ def train_all_models(_df: pd.DataFrame):
             "Test_MAE":  mean_absolute_error(y_test, yte_pred),
         })
 
-    results_df = pd.DataFrame(results).sort_values("Test_R2", ascending=False)
+    results_df = pd.DataFrame(results).sort_values("Test_MAE", ascending=True)
 
     # RF details
     rf_pipe = fitted["Random Forest"]
@@ -1175,8 +1175,9 @@ with tabs[5]:
             st.error(f"Training failed: {e}")
             st.stop()
 
-    # best_model_name available for the rest of this tab
-    best_model_name = results_df.iloc[0]["Model"]
+    # Random Forest is used as the primary model for Feature Importance,
+    # PDP, and What-If Simulator — MDI interpretability is cleaner for RF.
+    best_model_name = "Random Forest"
 
     # ── 1. Feature Set Comparison ────────────────────────────────────────────
     st.subheader("1️⃣ Feature Set Comparison (5-Fold CV, Random Forest)")
@@ -1214,7 +1215,7 @@ with tabs[5]:
         "A large gap between train and test metrics indicates **overfitting**."
     )
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-    plot_r = results_df.sort_values("Test_R2", ascending=True)
+    plot_r = results_df.sort_values("Test_R2", ascending=True)  # display only
     axes[0].barh(plot_r["Model"], plot_r["Test_R2"], color=BLUE, alpha=0.9)
     axes[0].set_title(f"Test R² ({best_fs})"); axes[0].set_xlabel("Test R²")
     axes[1].barh(plot_r["Model"], plot_r["Test_MAE"], color=BLUE, alpha=0.9)
@@ -1481,8 +1482,8 @@ with tabs[5]:
     plt.close()
 
     st.caption(
-        f"Model: {best_model_name} · Feature set: {best_fs} · "
-        f"Test MAE ≈ {results_df.iloc[0]['Test_MAE']:.1f} g/km. "
+        f"Model: Random Forest · Feature set: {best_fs} · "
+        f"Test MAE ≈ {results_df[results_df['Model']=='Random Forest']['Test_MAE'].iloc[0]:.1f} g/km. "
         "Sensitivity curves show the non-linear effect of each feature "
         "while holding all others constant (ceteris paribus)."
     )
