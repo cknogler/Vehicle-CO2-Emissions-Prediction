@@ -924,14 +924,12 @@ with tabs[3]:
 
     OUTLIER_CONTEXT = {
         "CO2 (g/km)": (
-            "**128 statistical outliers** — but all are real vehicles. "
-            "The upper outliers (>306 g/km) are high-performance cars: "
-            "Lamborghini Aventador (398 g/km), Bugatti Veyron (596 g/km), "
-            "Rolls-Royce Phantom (385 g/km). These exist in the market and "
-            "are correctly included. The lower bound (<30 g/km) is physically "
-            "implausible for combustion engines — no petrol or diesel vehicle "
-            "achieves this, so the lower outliers are likely measurement anomalies "
-            "in the original registry."
+            "**128 statistical outliers** — all are upper outliers (>306 g/km), real high-performance vehicles. "
+            "The lower bound (<30.5 g/km) is never reached in the deduplicated dataset — "
+            "no petrol or diesel vehicle achieves this, confirming data quality. "
+            "Upper examples: Lamborghini Aventador (398 g/km), Bugatti Veyron (596 g/km), "
+            "Rolls-Royce Phantom (385 g/km). These are correctly included — they are "
+            "real homologated vehicles at the extreme end of the market."
         ),
         "Maximum Power (kW)": (
             "**477 statistical outliers** — the lower bound of **-5.0 kW is a "
@@ -1340,10 +1338,13 @@ with tabs[5]:
         fig.suptitle(f"Partial Dependence Plots – Random Forest ({best_fs})", fontsize=16)
         fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
         st.caption(
-            "Interpretation: The CO₂ increase with mass and power is non-linear — "
-            "the effect is stronger at lower values than at higher ones (diminishing marginal returns). "
-            "More gears correlate slightly negatively with CO₂ (more efficient gear spacing). "
-            "Automatic gearbox shows marginally higher CO₂ than manual — after controlling for all other features."
+            "Interpretation: Mass and power show opposite non-linear patterns. "
+            "**Empty Mass:** diminishing returns — the CO₂ increase per kg flattens above ~1,600 kg, "
+            "as very heavy vehicles (large vans, SUVs) tend to have more efficient engines at high load. "
+            "**Maximum Power:** increasing returns — the CO₂ increase per kW accelerates above 150 kW, "
+            "as high-performance engines consume disproportionately more fuel. "
+            "**GearCount:** slight negative effect — more gears correlate with marginally lower CO₂ "
+            "(more efficient gear spacing allows the engine to run closer to its optimal RPM)."
         )
     except Exception as e:
         st.warning(f"PDP not available: {e}")
