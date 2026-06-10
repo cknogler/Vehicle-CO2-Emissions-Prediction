@@ -1,87 +1,85 @@
 """
-pipeline.py
-===========
-Vehicle CO₂ Emissions – Data Processing & ML Pipeline
+pipeline.py – Vehicle CO₂ Emissions · Data Pipeline & Model Training
 ADEME Car Labelling Dataset (cl_JUIN_2013-complet3.csv)
 
-Usage:
-    python pipeline.py --data cl_JUIN_2013-complet3.csv
-    python pipeline.py --data cl_JUIN_2013-complet3.csv --output results/
+All data loading, preprocessing, feature engineering, clustering and
+model training lives here. app.py imports only the public functions.
 
-Output:
-    results/df_clean.csv        – cleaned dataset
-    results/df_unique.csv       – deduplicated dataset (ES+GO)
-    results/df_clustered.csv    – with cluster labels (K-Prototypes)
-    results/model_best.pkl      – best trained model (pipeline object)
-    results/model_meta.json     – metrics, feature importances, hyperparameters
+Public API
+----------
+load_data(source)          → df_raw, df_unique
+train_models(df_unique)    → ModelBundle (dataclass)
+run_clustering(df_unique)  → df_with_cluster
 """
 
-import argparse
-import json
-import os
-import pickle
+from __future__ import annotations
+import io
+import urllib.request
 import warnings
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from scipy.stats import pearsonr, spearmanr
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.linear_model import LinearRegression, Lasso, Ridge
+from sklearn.linear_model import Lasso, LinearRegression, Ridge
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
+try:
+    from kmodes.kprototypes import KPrototypes
+    KPROTO_AVAILABLE = True
+except ImportError:
+    KPROTO_AVAILABLE = False
+
 warnings.filterwarnings("ignore")
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+CSV_URL = (
+    "https://raw.githubusercontent.com/cknogler/"
+    "Vehicle-CO2-Emissions-Prediction/main/cl_JUIN_2013-complet3.csv"
+)
 
 RANDOM_STATE = 42
 
-# ── Column mapping (French → English) ────────────────────────────────────────
 COLUMN_MAPPING = {
-    "Marque": "Brand",
-    "Modèle dossier": "Folder Model",
-    "Modèle UTAC": "Utac Model",
-    "Désignation commerciale": "Commerical Designation",
-    "CNIT": "cnit",
-    "Type Variante Version (TVV)": "Type Variant Version",
-    "Carburant": "Fuel",
-    "Hybride": "Hybrid",
+    "Marque": "Brand", "Modèle dossier": "Folder Model",
+    "Modèle UTAC": "Utac Model", "Désignation commerciale": "Commercial Designation",
+    "CNIT": "cnit", "Type Variante Version (TVV)": "Type Variant Version",
+    "Carburant": "Fuel", "Hybride": "Hybrid",
     "Puissance administrative": "Administrative Power",
     "Puissance maximale (kW)": "Maximum Power (kW)",
     "Boîte de vitesse": "Gearbox",
     "Consommation urbaine (l/100km)": "Urban Consumption (l/100km)",
     "Consommation extra-urbaine (l/100km)": "Extra Urban Consumption (l/100km)",
     "Consommation mixte (l/100km)": "Combined Consumption (l/100km)",
-    "CO2 (g/km)": "CO2 (g/km)",
-    "CO type I (g/km)": "CO type 1 (g/km)",
-    "HC (g/km)": "HC (g/km)",
-    "NOX (g/km)": "NOX (g/km)",
-    "HC+NOX (g/km)": "HC+NOX (g/km)",
-    "Particules (g/km)": "Particles (g/km)",
+    "CO2 (g/km)": "CO2 (g/km)", "CO type I (g/km)": "CO type 1 (g/km)",
+    "HC (g/km)": "HC (g/km)", "NOX (g/km)": "NOX (g/km)",
+    "HC+NOX (g/km)": "HC+NOX (g/km)", "Particules (g/km)": "Particles (g/km)",
     "masse vide euro min (kg)": "Empty Mass Euro Min (kg)",
     "masse vide euro max (kg)": "Empty Mass Euro Max (kg)",
-    "Champ V9": "Field V9",
-    "Date de mise à jour": "Update Date",
-    "Carrosserie": "Body",
-    "gamme": "Range",
+    "Champ V9": "Field V9", "Date de mise à jour": "Update Date",
+    "Carrosserie": "Body", "gamme": "Range",
 }
+
+DEDUP_COLS = [
+    "Brand", "Folder Model", "Fuel", "Body", "Gearbox",
+    "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
+    "CO2 (g/km)", "Combined Consumption (l/100km)", "Range",
+]
 
 GEAR_TYPE_MAP = {
     "M": "Manual", "A": "Automatic", "V": "CVT",
     "D": "DCT",    "N": "Automatic", "S": "Manual",
 }
 
-UNIQUE_COLS = [
-    "Brand", "Folder Model", "Fuel", "Body", "Gearbox",
-    "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
-    "CO2 (g/km)", "Combined Consumption (l/100km)", "Range",
-]
-
 FEATURE_SETS = {
-    "all_features":    ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)",
-                        "Fuel", "GearType", "GearCount", "Body"],
-    "no_body":         ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)",
-                        "Fuel", "GearType", "GearCount"],
+    "all_features":    ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "GearType", "GearCount", "Body"],
+    "no_body":         ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel", "GearType", "GearCount"],
     "mass_power_fuel": ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)", "Fuel"],
     "mass_power_only": ["Empty Mass Euro Avg (kg)", "Maximum Power (kW)"],
 }
@@ -89,170 +87,144 @@ FEATURE_SETS = {
 TARGET = "CO2 (g/km)"
 
 
-# ── 1. LOAD ───────────────────────────────────────────────────────────────────
+# ── Step 1 · Load & preprocess raw CSV ──────────────────────────────────────
 
-def load_data(filepath: str) -> pd.DataFrame:
-    """Load CSV – auto-detects encoding and separator."""
-    for enc in ["latin1", "utf-8", "cp1252"]:
-        for sep in [";", ","]:
+def _read_csv(raw: bytes) -> pd.DataFrame:
+    for enc in ("latin1", "utf-8", "cp1252"):
+        for sep in (";", ","):
             try:
-                df = pd.read_csv(filepath, sep=sep, encoding=enc, low_memory=False)
+                df = pd.read_csv(io.BytesIO(raw), sep=sep, encoding=enc, low_memory=False)
                 if df.shape[1] > 5:
-                    print(f"  Loaded: {df.shape[0]:,} rows × {df.shape[1]} cols "
-                          f"(sep='{sep}', enc='{enc}')")
                     return df
             except Exception:
                 continue
-    raise ValueError(f"Could not read {filepath}")
+    raise ValueError("CSV could not be parsed with any known encoding/separator.")
 
 
-# ── 2. PREPROCESS ─────────────────────────────────────────────────────────────
+def _preprocess(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.rename(columns={k: v for k, v in COLUMN_MAPPING.items() if k in df.columns})
 
-def preprocess(df: pd.DataFrame) -> pd.DataFrame:
-    """Rename, impute, clean and engineer features."""
-    df = df.rename(columns={k: v for k, v in COLUMN_MAPPING.items()
-                             if k in df.columns})
+    # HC/NOX imputation via sum-column
+    if all(c in df.columns for c in ("HC (g/km)", "NOX (g/km)", "HC+NOX (g/km)")):
+        hc  = (df["HC+NOX (g/km)"] - df["NOX (g/km)"]).fillna(df["HC (g/km)"])
+        nox = (df["HC+NOX (g/km)"] - df["HC (g/km)"]).fillna(df["NOX (g/km)"])
+        df["HC (g/km)"], df["NOX (g/km)"] = hc, nox
+        df["HC+NOX (g/km)"] = hc + nox
 
-    # HC/NOX imputation from sum
-    if all(c in df.columns for c in ["HC (g/km)", "NOX (g/km)", "HC+NOX (g/km)"]):
-        df["hc_c"]  = df["HC+NOX (g/km)"] - df["NOX (g/km)"]
-        df["nox_c"] = df["HC+NOX (g/km)"] - df["HC (g/km)"]
-        df["hc_c"]  = df["hc_c"].fillna(df["HC (g/km)"])
-        df["nox_c"] = df["nox_c"].fillna(df["NOX (g/km)"])
-        df["HC (g/km)"]     = df["hc_c"]
-        df["NOX (g/km)"]    = df["nox_c"]
-        df["HC+NOX (g/km)"] = df["hc_c"] + df["nox_c"]
-        df.drop(columns=["hc_c", "nox_c"], inplace=True)
-
-    # Gearbox fixes
+    # Gearbox entry-error corrections
     if "Gearbox" in df.columns:
         df["Gearbox"] = df["Gearbox"].replace({"N 0": "A 0", "N 1": "A 0", "S 6": "D 6"})
 
-    # Electric vehicles: pollutant NaN → 0
-    elec_cols = ["CO type 1 (g/km)", "Urban Consumption (l/100km)",
-                 "Extra Urban Consumption (l/100km)", "Combined Consumption (l/100km)",
-                 "CO2 (g/km)", "HC+NOX (g/km)", "HC (g/km)", "Particles (g/km)"]
+    # Electric vehicles → 0 emissions (correct, not missing)
+    ev_cols = [
+        "CO type 1 (g/km)", "Urban Consumption (l/100km)",
+        "Extra Urban Consumption (l/100km)", "Combined Consumption (l/100km)",
+        "CO2 (g/km)", "HC+NOX (g/km)", "HC (g/km)", "Particles (g/km)",
+    ]
     if "Fuel" in df.columns:
-        el = df["Fuel"] == "EL"
-        for c in elec_cols:
+        mask_ev = df["Fuel"] == "EL"
+        for c in ev_cols:
             if c in df.columns:
-                df.loc[el, c] = df.loc[el, c].fillna(0)
+                df.loc[mask_ev, c] = df.loc[mask_ev, c].fillna(0)
 
-    # Average kerb weight
-    min_c, max_c = "Empty Mass Euro Min (kg)", "Empty Mass Euro Max (kg)"
-    if min_c in df.columns and max_c in df.columns:
+    # Kerb weight → single average column
+    if "Empty Mass Euro Min (kg)" in df.columns and "Empty Mass Euro Max (kg)" in df.columns:
         df["Empty Mass Euro Avg (kg)"] = (
-            pd.to_numeric(df[min_c], errors="coerce") +
-            pd.to_numeric(df[max_c], errors="coerce")
+            pd.to_numeric(df["Empty Mass Euro Min (kg)"], errors="coerce")
+            + pd.to_numeric(df["Empty Mass Euro Max (kg)"], errors="coerce")
         ) / 2
-        df.drop(columns=[min_c, max_c], inplace=True)
+        df.drop(columns=["Empty Mass Euro Min (kg)", "Empty Mass Euro Max (kg)"], inplace=True)
 
-    # Numeric types
-    for col in [TARGET, "Combined Consumption (l/100km)",
-                "Maximum Power (kW)", "Empty Mass Euro Avg (kg)"]:
+    # Numeric coercion
+    for col in (TARGET, "Combined Consumption (l/100km)", "Maximum Power (kW)", "Empty Mass Euro Avg (kg)"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # GearType + GearCount from Gearbox string
-    if "Gearbox" in df.columns:
-        gs = df["Gearbox"].astype(str).str.split(" ", expand=True)
-        df["GearType"]  = gs[0].map(GEAR_TYPE_MAP).fillna("Other")
-        df["GearCount"] = pd.to_numeric(
-            gs[1] if 1 in gs.columns else pd.Series([np.nan] * len(df)),
-            errors="coerce"
-        )
-
-    print(f"  Preprocessed: {df.shape[0]:,} rows × {df.shape[1]} cols")
     return df
 
 
-# ── 3. DEDUPLICATE ────────────────────────────────────────────────────────────
+def _make_unique(df: pd.DataFrame) -> pd.DataFrame:
+    """Deduplicate to unique mechanical configurations (ES + GO only)."""
+    df_c = df[df["Fuel"].isin(["ES", "GO"])].copy()
 
-def deduplicate(df: pd.DataFrame) -> pd.DataFrame:
-    """Filter ES/GO and remove duplicate mechanical configurations."""
-    if "Fuel" not in df.columns:
-        return df
+    if "Gearbox" in df_c.columns:
+        gs = df_c["Gearbox"].astype(str).str.split(" ", expand=True)
+        df_c["GearType"]  = gs[0].map(GEAR_TYPE_MAP).fillna("Other")
+        df_c["GearCount"] = pd.to_numeric(gs[1] if 1 in gs.columns else pd.Series(dtype=float), errors="coerce")
 
-    df_combus = df[df["Fuel"].isin(["ES", "GO"])].copy()
-    print(f"  ES/GO filter: {len(df_combus):,} rows")
-
-    cols = [c for c in UNIQUE_COLS if c in df_combus.columns]
-    df_unique = (
-        df_combus.groupby(cols, dropna=False)
-        .size()
+    cols = [c for c in DEDUP_COLS if c in df_c.columns]
+    df_u = (
+        df_c.groupby(cols, dropna=False).size()
         .reset_index(name="Clone_Count")
         .sort_values("Clone_Count", ascending=False)
         .reset_index(drop=True)
     )
 
-    # Re-add GearType + GearCount
-    if "Gearbox" in df_unique.columns:
-        gs = df_unique["Gearbox"].astype(str).str.split(" ", expand=True)
-        df_unique["GearType"]  = gs[0].map(GEAR_TYPE_MAP).fillna("Other")
-        df_unique["GearCount"] = pd.to_numeric(
-            gs[1] if 1 in gs.columns else pd.Series([np.nan] * len(df_unique)),
-            errors="coerce"
-        )
+    # Re-attach GearType / GearCount after groupby
+    if "Gearbox" in df_u.columns:
+        gs2 = df_u["Gearbox"].astype(str).str.split(" ", expand=True)
+        df_u["GearType"]  = gs2[0].map(GEAR_TYPE_MAP).fillna("Other")
+        df_u["GearCount"] = pd.to_numeric(gs2[1] if 1 in gs2.columns else pd.Series(dtype=float), errors="coerce")
 
-    pct = (1 - len(df_unique) / len(df_combus)) * 100
-    print(f"  Deduplicated: {len(df_unique):,} unique configs "
-          f"({pct:.1f}% duplicates removed)")
-    return df_unique
+    return df_u
 
 
-# ── 4. CLUSTERING (K-Prototypes) ─────────────────────────────────────────────
-
-def run_clustering(df: pd.DataFrame, k: int = 4) -> pd.DataFrame:
-    """K-Prototypes clustering on mixed numeric + categorical features."""
-    try:
-        from kmodes.kprototypes import KPrototypes
-    except ImportError:
-        print("  kmodes not installed – skipping clustering. "
-              "Install with: pip install kmodes")
-        return df
-
-    categorical_cols = [c for c in ["Body", "Fuel", "Gearbox"] if c in df.columns]
-    numeric_cols     = [c for c in ["Maximum Power (kW)", "Empty Mass Euro Avg (kg)"]
-                        if c in df.columns]
-    feature_cols     = categorical_cols + numeric_cols
-
-    df_c = df[feature_cols + [TARGET]].dropna().copy()
-
-    from sklearn.preprocessing import StandardScaler
-    scaler = StandardScaler()
-    df_kp  = df_c.copy()
-    df_kp[numeric_cols] = scaler.fit_transform(df_kp[numeric_cols])
-    for col in categorical_cols:
-        df_kp[col] = df_kp[col].astype(str)
-
-    X_matrix        = df_kp[feature_cols].to_numpy(dtype=object)
-    categorical_idx = [feature_cols.index(c) for c in categorical_cols]
-
-    kproto = KPrototypes(n_clusters=k, init="Cao", n_init=5,
-                         verbose=0, random_state=RANDOM_STATE)
-    df_c["Cluster"] = kproto.fit_predict(X_matrix, categorical=categorical_idx)
-
-    print(f"  K-Prototypes k={k}: {dict(df_c['Cluster'].value_counts().sort_index())}")
-    return df_c
-
-
-# ── 5. PREDICTIVE MODELLING ───────────────────────────────────────────────────
-
-def train_models(df: pd.DataFrame):
+def load_data(source=CSV_URL) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    1. Feature-set comparison via 5-fold CV (Random Forest)
-    2. Train all 5 models on best feature set
-    3. Return best model, metrics, feature importances
-    """
-    all_needed = sorted(set(
-        [TARGET] + [c for cols in FEATURE_SETS.values() for c in cols]
-    ))
-    df_m = df[[c for c in all_needed if c in df.columns]].dropna().copy()
-    print(f"  Modelling dataset: {len(df_m):,} rows")
+    Load and preprocess the ADEME dataset.
 
-    def get_types(features):
-        num = df_m[features].select_dtypes(include=["int64","float64"]).columns.tolist()
-        cat = df_m[features].select_dtypes(include=["object","category"]).columns.tolist()
+    Parameters
+    ----------
+    source : str | bytes
+        URL string or raw CSV bytes (from st.file_uploader).
+
+    Returns
+    -------
+    df_raw    : full preprocessed dataset (all fuel types)
+    df_unique : deduplicated ES/GO configurations with GearType/GearCount
+    """
+    if isinstance(source, str):
+        with urllib.request.urlopen(source) as r:
+            raw = r.read()
+    else:
+        raw = bytes(source)
+
+    df_raw    = _preprocess(_read_csv(raw))
+    df_unique = _make_unique(df_raw)
+    return df_raw, df_unique
+
+
+# ── Step 2 · Model training ──────────────────────────────────────────────────
+
+@dataclass
+class ModelBundle:
+    """All trained artifacts needed by the Streamlit app."""
+    fitted:       dict          # name → fitted Pipeline
+    results:      pd.DataFrame  # Model / Train_R2 / Test_R2 / Train_MAE / Test_MAE
+    feature_cols: list[str]     # winning feature set columns
+    best_fs:      str           # winning feature set name
+    fs_comparison:pd.DataFrame  # CV results for all four feature sets
+    X_train:      pd.DataFrame
+    X_test:       pd.DataFrame
+    y_train:      pd.Series
+    y_test:       pd.Series
+    rf_pipe:      Pipeline      # Random Forest pipeline (for PDP, feature importance)
+    feature_importance: pd.DataFrame  # Feature / Importance
+    numeric_features:   list[str]
+    categorical_features: list[str]
+
+
+def train_models(df_unique: pd.DataFrame) -> ModelBundle:
+    """
+    Cross-validate four feature sets, pick the best, then train five regressors.
+    Returns a ModelBundle with all artifacts cached for the Streamlit app.
+    """
+    all_cols = sorted({TARGET} | {c for cols in FEATURE_SETS.values() for c in cols})
+    df_m = df_unique[[c for c in all_cols if c in df_unique.columns]].dropna().copy()
+
+    def split_types(feats):
+        num = df_m[feats].select_dtypes(include=["int64", "float64"]).columns.tolist()
+        cat = df_m[feats].select_dtypes(include=["object", "category"]).columns.tolist()
         return num, cat
 
     def preprocessors(num, cat):
@@ -266,167 +238,136 @@ def train_models(df: pd.DataFrame):
         ])
         return scaled, tree
 
-    # ── Feature-set comparison ────────────────────────────────────────────────
-    print("\n  Feature-set comparison (5-fold CV, Random Forest):")
-    fs_results = []
-    for fs_name, fs_feats in FEATURE_SETS.items():
-        feats = [f for f in fs_feats if f in df_m.columns]
-        if not feats:
+    # ── Feature-set CV ───────────────────────────────────────────────────────
+    fs_rows = []
+    for name, feats in FEATURE_SETS.items():
+        avail = [f for f in feats if f in df_m.columns]
+        if not avail:
             continue
-        num, cat = get_types(feats)
-        _, tree_pre = preprocessors(num, cat)
-        pipe = Pipeline([
-            ("pre", tree_pre),
-            ("m", RandomForestRegressor(200, random_state=RANDOM_STATE, n_jobs=-1))
-        ])
-        scores = cross_val_score(pipe, df_m[feats], df_m[TARGET],
-                                 cv=5, scoring="neg_mean_absolute_error")
-        mae_cv = -np.mean(scores)
-        fs_results.append({"Feature_Set": fs_name, "Features": feats,
-                            "CV_MAE": round(mae_cv, 3), "CV_Std": round(np.std(scores), 3)})
-        print(f"    {fs_name:20s} CV MAE = {mae_cv:.2f} ± {np.std(scores):.2f}")
+        _, tree_pre = preprocessors(*split_types(avail))
+        pipe = Pipeline([("pre", tree_pre),
+                          ("m", RandomForestRegressor(200, random_state=RANDOM_STATE, n_jobs=-1))])
+        scores = cross_val_score(pipe, df_m[avail], df_m[TARGET],
+                                  cv=5, scoring="neg_mean_absolute_error")
+        fs_rows.append({
+            "Feature_Set": name, "Features": ", ".join(avail),
+            "CV_MAE_mean": -scores.mean(), "CV_MAE_std": scores.std(),
+        })
 
-    best_fs   = min(fs_results, key=lambda x: x["CV_MAE"])
-    feat_cols = best_fs["Features"]
-    print(f"\n  Best feature set: {best_fs['Feature_Set']} "
-          f"(CV MAE = {best_fs['CV_MAE']})")
+    fs_df   = pd.DataFrame(fs_rows).sort_values("CV_MAE_mean")
+    best_fs = fs_df.iloc[0]["Feature_Set"]
+    feat_cols = [f for f in FEATURE_SETS[best_fs] if f in df_m.columns]
 
-    # ── Train/test split ──────────────────────────────────────────────────────
-    X = df_m[feat_cols]
-    y = df_m[TARGET]
-    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2,
-                                               random_state=RANDOM_STATE)
-    num_f, cat_f = get_types(feat_cols)
+    X, y = df_m[feat_cols], df_m[TARGET]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
+
+    num_f, cat_f = split_types(feat_cols)
     scaled_pre, tree_pre = preprocessors(num_f, cat_f)
 
-    # ── Model definitions (optimised hyperparameters) ─────────────────────────
     model_defs = {
         "Linear Regression": Pipeline([("pre", scaled_pre), ("m", LinearRegression())]),
         "Ridge":             Pipeline([("pre", scaled_pre), ("m", Ridge(alpha=1.0))]),
         "Lasso":             Pipeline([("pre", scaled_pre), ("m", Lasso(alpha=0.1))]),
-        "Random Forest":     Pipeline([("pre", tree_pre), ("m", RandomForestRegressor(
-            n_estimators=300, max_depth=20, max_features=0.8,
-            min_samples_split=2, min_samples_leaf=1,
-            random_state=RANDOM_STATE, n_jobs=-1
-        ))]),
-        "Gradient Boosting": Pipeline([("pre", tree_pre), ("m", GradientBoostingRegressor(
-            n_estimators=200, learning_rate=0.2, max_depth=6,
-            min_samples_split=10, subsample=1.0, max_features=0.5,
-            random_state=RANDOM_STATE
-        ))]),
+        "Random Forest":     Pipeline([("pre", tree_pre),
+                                        ("m", RandomForestRegressor(
+                                            n_estimators=300, max_depth=20,
+                                            max_features=0.8, random_state=RANDOM_STATE, n_jobs=-1,
+                                        ))]),
+        "Gradient Boosting": Pipeline([("pre", tree_pre),
+                                        ("m", GradientBoostingRegressor(
+                                            n_estimators=200, learning_rate=0.2,
+                                            max_depth=6, subsample=1.0,
+                                            max_features=0.5, random_state=RANDOM_STATE,
+                                        ))]),
     }
 
-    # ── Train & evaluate ──────────────────────────────────────────────────────
-    print("\n  Model comparison (80/20 split):")
-    results = {}
-    fitted  = {}
-    best_name, best_mae_val, best_pipe = None, 1e9, None
-
+    # ── Train & evaluate ─────────────────────────────────────────────────────
+    results, fitted = [], {}
     for name, pipe in model_defs.items():
-        pipe.fit(X_tr, y_tr)
+        pipe.fit(X_train, y_train)
         fitted[name] = pipe
-        y_tr_p = pipe.predict(X_tr)
-        y_te_p = pipe.predict(X_te)
-        train_mae = mean_absolute_error(y_tr, y_tr_p)
-        test_mae  = mean_absolute_error(y_te, y_te_p)
-        train_r2  = r2_score(y_tr, y_tr_p)
-        test_r2   = r2_score(y_te, y_te_p)
-        results[name] = {
-            "Train_R2": round(train_r2, 4), "Test_R2": round(test_r2, 4),
-            "Train_MAE": round(train_mae, 3), "Test_MAE": round(test_mae, 3),
-        }
-        print(f"    {name:20s} Test R²={test_r2:.4f}  Test MAE={test_mae:.2f}")
-        if test_mae < best_mae_val:
-            best_mae_val, best_name, best_pipe = test_mae, name, pipe
+        results.append({
+            "Model":     name,
+            "Train_R2":  r2_score(y_train, pipe.predict(X_train)),
+            "Test_R2":   r2_score(y_test,  pipe.predict(X_test)),
+            "Train_MAE": mean_absolute_error(y_train, pipe.predict(X_train)),
+            "Test_MAE":  mean_absolute_error(y_test,  pipe.predict(X_test)),
+        })
 
-    print(f"\n  Best model: {best_name} (Test MAE={best_mae_val:.2f} g/km)")
+    results_df = pd.DataFrame(results).sort_values("Test_MAE")
 
-    # ── Feature importance (Random Forest) ───────────────────────────────────
-    rf_pipe   = fitted["Random Forest"]
-    rf_pre    = rf_pipe.named_steps["pre"]
-    rf_model  = rf_pipe.named_steps["m"]
-    feat_names = rf_pre.get_feature_names_out()
-    fi = dict(zip(feat_names.tolist(),
-                  rf_model.feature_importances_.tolist()))
+    # ── Random Forest feature importance ─────────────────────────────────────
+    rf_pipe  = fitted["Random Forest"]
+    fi_names = rf_pipe.named_steps["pre"].get_feature_names_out()
+    fi_vals  = rf_pipe.named_steps["m"].feature_importances_
+    fi_df    = (
+        pd.DataFrame({"Feature": fi_names, "Importance": fi_vals})
+        .sort_values("Importance", ascending=False)
+        .reset_index(drop=True)
+    )
 
-    meta = {
-        "best_model":        best_name,
-        "best_feature_set":  best_fs["Feature_Set"],
-        "feature_cols":      feat_cols,
-        "target":            TARGET,
-        "model_results":     results,
-        "feature_set_cv":    fs_results,
-        "feature_importances": {k: round(v, 6) for k, v in
-                                 sorted(fi.items(), key=lambda x: -x[1])[:15]},
-        "hyperparameters": {
-            "Random Forest": {
-                "n_estimators": 300, "max_depth": 20, "max_features": 0.8,
-                "min_samples_split": 2, "min_samples_leaf": 1,
-            },
-            "Gradient Boosting": {
-                "n_estimators": 200, "learning_rate": 0.2, "max_depth": 6,
-                "min_samples_split": 10, "subsample": 1.0, "max_features": 0.5,
-            },
-        },
-    }
-
-    return best_pipe, best_name, meta
+    return ModelBundle(
+        fitted=fitted, results=results_df, feature_cols=feat_cols,
+        best_fs=best_fs, fs_comparison=fs_df,
+        X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test,
+        rf_pipe=rf_pipe, feature_importance=fi_df,
+        numeric_features=num_f, categorical_features=cat_f,
+    )
 
 
-# ── 6. MAIN ───────────────────────────────────────────────────────────────────
+# ── Step 3 · Clustering ──────────────────────────────────────────────────────
 
-def run_pipeline(data_path: str, output_dir: str = "results", k: int = 4):
-    os.makedirs(output_dir, exist_ok=True)
+def run_clustering(df_unique: pd.DataFrame, k: int = 4) -> pd.DataFrame:
+    """
+    K-Prototypes clustering on mixed numeric + categorical features.
+    Returns df_unique slice (no NaNs) with an added 'Cluster' column.
+    Requires kmodes >= 0.12.2.
+    """
+    if not KPROTO_AVAILABLE:
+        raise RuntimeError("kmodes is not installed. Add 'kmodes>=0.12.2' to requirements.txt.")
 
-    sep = "=" * 60
+    cat_cols = [c for c in ("Body", "Fuel", "Gearbox") if c in df_unique.columns]
+    num_cols = [c for c in ("Maximum Power (kW)", "Empty Mass Euro Avg (kg)") if c in df_unique.columns]
+    feat_cols = cat_cols + num_cols
 
-    print(f"\n{sep}\nSTEP 1 – Load data\n{sep}")
-    df_raw = load_data(data_path)
+    df_c   = df_unique[feat_cols + [TARGET]].dropna().copy()
+    df_kp  = df_c.copy()
+    scaler = StandardScaler()
+    df_kp[num_cols] = scaler.fit_transform(df_kp[num_cols])
+    for c in cat_cols:
+        df_kp[c] = df_kp[c].astype(str)
 
-    print(f"\n{sep}\nSTEP 2 – Preprocessing\n{sep}")
-    df_clean = preprocess(df_raw)
-    out = os.path.join(output_dir, "df_clean.csv")
-    df_clean.to_csv(out, index=False)
-    print(f"  Saved: {out}")
+    X_mat  = df_kp[feat_cols].to_numpy(dtype=object)
+    cat_ix = [feat_cols.index(c) for c in cat_cols]
 
-    print(f"\n{sep}\nSTEP 3 – Deduplication\n{sep}")
-    df_unique = deduplicate(df_clean)
-    out = os.path.join(output_dir, "df_unique.csv")
-    df_unique.to_csv(out, index=False)
-    print(f"  Saved: {out}")
-
-    print(f"\n{sep}\nSTEP 4 – K-Prototypes Clustering (k={k})\n{sep}")
-    df_clustered = run_clustering(df_unique, k=k)
-    out = os.path.join(output_dir, "df_clustered.csv")
-    df_clustered.to_csv(out, index=False)
-    print(f"  Saved: {out}")
-
-    print(f"\n{sep}\nSTEP 5 – Predictive Modelling\n{sep}")
-    best_pipe, best_name, meta = train_models(df_unique)
-
-    model_path = os.path.join(output_dir, "model_best.pkl")
-    with open(model_path, "wb") as f:
-        pickle.dump({"model": best_pipe, "name": best_name,
-                     "features": meta["feature_cols"]}, f)
-    print(f"  Saved: {model_path}")
-
-    meta_path = os.path.join(output_dir, "model_meta.json")
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
-    print(f"  Saved: {meta_path}")
-
-    print(f"\n{sep}\n✓ Pipeline complete!\n{sep}")
-    print(f"  Output directory: {output_dir}/")
-    return df_clean, df_unique, df_clustered, best_pipe, meta
+    kp = KPrototypes(n_clusters=k, init="Cao", n_init=5, verbose=0, random_state=RANDOM_STATE)
+    df_c["Cluster"] = kp.fit_predict(X_mat, categorical=cat_ix)
+    return df_c
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Vehicle CO₂ Emissions Pipeline")
-    parser.add_argument("--data",   required=True,
-                        help="Path to CSV (cl_JUIN_2013-complet3.csv)")
-    parser.add_argument("--output", default="results",
-                        help="Output directory (default: results/)")
-    parser.add_argument("--k",      type=int, default=4,
-                        help="Number of clusters for K-Prototypes (default: 4)")
-    args = parser.parse_args()
-    run_pipeline(args.data, args.output, args.k) 
+# ── Convenience helpers (used by analysis notebooks / app) ──────────────────
+
+def segment_filter(
+    df_unique: pd.DataFrame,
+    fuel: str,
+    body: str,
+    kw_lo: float = 0,
+    kw_hi: float = 9999,
+    gear_prefix: str | None = None,
+) -> pd.DataFrame:
+    """Return rows matching the given segment criteria."""
+    mask = (
+        df_unique["Fuel"].eq(fuel)
+        & df_unique["Body"].eq(body)
+        & df_unique["Maximum Power (kW)"].between(kw_lo, kw_hi)
+    )
+    if gear_prefix:
+        mask &= df_unique["Gearbox"].astype(str).str.startswith(gear_prefix)
+    return df_unique[mask].copy()
+
+
+def predict_co2(bundle: ModelBundle, row_dict: dict, model_name: str = "Random Forest") -> float:
+    """Predict CO₂ for a single feature row dict."""
+    return float(bundle.fitted[model_name].predict(pd.DataFrame([row_dict]))[0])
