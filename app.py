@@ -191,7 +191,7 @@ with col_left:
                               index=body_opts.index(base["body"]) if base["body"] in body_opts else 0)
 
     fuel_code  = "GO" if "GO" in sim_fuel else "ES"
-    gtype_code = "Manual" if sim_fuel == "Manual" else sim_gtype
+    gtype_code = sim_gtype  # "Manual" or "Automatic"
 
     sim_row  = make_row(sim_mass, sim_power, sim_gears, fuel_code, sim_body, gtype_code, mb.feature_cols)
     sim_pred = predict_co2(mb, sim_row)
@@ -237,14 +237,12 @@ with col_left:
         (axes[0], "Empty Mass Euro Avg (kg)", np.arange(800, 3300, 80), MINT, "Mass (kg)"),
         (axes[1], "Maximum Power (kW)",        np.arange(40,  570, 15), AMBER, "Power (kW)"),
     ]:
-        preds = []
-        for v in rng:
-            r = sim_row.copy(); r[key] = float(v)
-            preds.append(predict_co2(mb, r))
+        # Batch: build DataFrame of all rows at once, predict in one call
+        batch = pd.DataFrame([{**sim_row, key: float(v)} for v in rng])
+        preds = mb.fitted["Random Forest"].predict(batch)
         ax.plot(rng, preds, color=clr_line, lw=1.8)
         ax.fill_between(rng, preds, alpha=0.07, color=clr_line)
-        cur_val = sim_row[key]
-        ax.axvline(cur_val, color=RED, lw=1.2, linestyle="--", alpha=0.8)
+        ax.axvline(sim_row[key], color=RED, lw=1.2, linestyle="--", alpha=0.8)
         ax.set_xlabel(label, fontsize=8); ax.set_ylabel("CO₂ g/km", fontsize=8)
         ax.set_title(f"CO₂ vs. {label.split(' ')[0]}", fontsize=9)
 
@@ -316,10 +314,21 @@ with col_right:
 
             bdf = pd.DataFrame(rows).sort_values("Median").reset_index(drop=True)
 
+            # Colors follow sorted bdf order, not selection order
+            PALETTE = [MINT, AMBER, RED, "#A78BFA", "#38BDF8"]
+            bclr    = {b: PALETTE[i] for i, b in enumerate(bdf["Brand"])}
+
             # ── Metric cards ──────────────────────────────────────────────────
             brand_cols = st.columns(len(bdf))
+            best_median = bdf["Median"].iloc[0]
             for col_ui, (_, r) in zip(brand_cols, bdf.iterrows()):
-                saving = (bdf["Median"].iloc[0] - r["Median"]) * 15000 / 1000
+                is_best  = r.name == 0
+                diff     = r["Median"] - best_median          # ≥ 0; 0 for best brand
+                diff_lbl = (
+                    '<div style="font-size:.62rem;color:#00C8A0;font-weight:600;margin-top:.3rem">★ Most efficient</div>'
+                    if is_best else
+                    f'<div style="font-size:.62rem;color:{MUTED};margin-top:.3rem">+{diff:.0f} g/km vs best</div>'
+                )
                 col_ui.markdown(f"""
                 <div style='background:{CARD};border:1px solid {BORDER};border-radius:12px;
                             border-top:3px solid {bclr[r["Brand"]]};padding:.9rem;text-align:center'>
@@ -332,7 +341,7 @@ with col_right:
                     {r["Median"]:.0f}
                   </div>
                   <div style='font-size:.65rem;color:{MUTED}'>g/km · {int(r["N"])} models</div>
-                  {'<div style="font-size:.62rem;color:#00C8A0;font-weight:600;margin-top:.3rem">★ Most efficient</div>' if r.name == 0 else f'<div style="font-size:.62rem;color:{MUTED};margin-top:.3rem">+{bdf["Median"].iloc[0] - r["Median"]:+.0f} g/km</div>' if r["Median"] != bdf["Median"].iloc[0] else ''}
+                  {diff_lbl}
                 </div>""", unsafe_allow_html=True)
 
             st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
@@ -370,16 +379,13 @@ with col_right:
                 fig.patch.set_facecolor(CARD)
                 pw_rng = np.arange(40, 570, 12)
                 for _, r in bdf.iterrows():
-                    b = r["Brand"]
-                    base_b = make_row(r["Typical_kg"], sim_power, sim_gears,
-                                       fuel_code, sim_body, gtype_code, mb.feature_cols)
-                    preds = []
-                    for p in pw_rng:
-                        rb = base_b.copy(); rb["Maximum Power (kW)"] = float(p)
-                        preds.append(predict_co2(mb, rb))
+                    b      = r["Brand"]
+                    b_base = make_row(r["Typical_kg"], sim_power, sim_gears,
+                                      fuel_code, sim_body, gtype_code, mb.feature_cols)
+                    batch  = pd.DataFrame([{**b_base, "Maximum Power (kW)": float(p)} for p in pw_rng])
+                    preds  = mb.fitted["Random Forest"].predict(batch)
                     ax.plot(pw_rng, preds, color=bclr[b], lw=1.8, label=b)
-                    ax.scatter([r["Typical_kW"]], [r["Pred"]],
-                                color=bclr[b], s=40, zorder=5)
+                    ax.scatter([r["Typical_kW"]], [r["Pred"]], color=bclr[b], s=40, zorder=5)
                 ax.axvline(sim_power, color=MUTED, lw=1, linestyle="--", alpha=0.7,
                             label=f"Current: {sim_power} kW")
                 ax.set_xlabel("Max Power (kW)"); ax.set_ylabel("Predicted CO₂ (g/km)")
