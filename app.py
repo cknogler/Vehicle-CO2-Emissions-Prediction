@@ -1565,6 +1565,239 @@ with tabs[5]:
         f"Test MAE ≈ {results_df[results_df['Model']=='Random Forest']['Test_MAE'].iloc[0]:.1f} g/km"
     )
 
+    # ── 6. Brand Comparison ───────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("⑥ Brand Comparison — Real Data vs. Simulator Settings")
+    st.markdown(
+        "Select up to 5 brands. For each brand, the real vehicles matching the current "
+        "**Fuel · Body · Power range** filter are pulled from the dataset and compared — "
+        "actual measured CO₂ median alongside the model prediction for each brand's "
+        "typical vehicle in this segment."
+    )
+
+    # ── Derive power bracket from sim_power ──────────────────────────────────
+    if   sim_power <= 55:  kw_lo, kw_hi = 0,   55
+    elif sim_power <= 96:  kw_lo, kw_hi = 56,  96
+    elif sim_power <= 147: kw_lo, kw_hi = 97,  147
+    else:                  kw_lo, kw_hi = 148, 600
+
+    mask_seg = (
+        df_unique["Fuel"].eq(sim_fuel) &
+        df_unique["Body"].eq(sim_body) &
+        df_unique["Maximum Power (kW)"].between(kw_lo, kw_hi)
+    )
+    df_seg = df_unique[mask_seg].copy()
+
+    # Fallback: relax power bracket if too few results
+    if len(df_seg) < 10:
+        df_seg = df_unique[df_unique["Fuel"].eq(sim_fuel) & df_unique["Body"].eq(sim_body)].copy()
+
+    available_brands = sorted(
+        df_seg.groupby("Brand")["CO2 (g/km)"].count()
+        .where(lambda x: x >= 2).dropna().index.tolist()
+    )
+
+    if not available_brands:
+        st.info("No brands with ≥2 models found for the current filter. Adjust Fuel or Body Style.")
+    else:
+        # Default: top 4 brands by model count in segment
+        default_brands = (
+            df_seg.groupby("Brand")["CO2 (g/km)"].count()
+            .sort_values(ascending=False)
+            .head(4).index.tolist()
+        )
+        default_sel = [b for b in default_brands if b in available_brands]
+
+        selected_brands = st.multiselect(
+            "Select brands to compare",
+            options=available_brands,
+            default=default_sel,
+            max_selections=5,
+            help="Max 5 brands. Only brands with ≥2 models in the current segment are shown."
+        )
+
+        if selected_brands:
+            BRAND_PALETTE = [MINT, AMBER, RED, "#A855F7", "#3B82F6"]
+            brand_colors  = {b: BRAND_PALETTE[i] for i, b in enumerate(selected_brands)}
+
+            # ── Per-brand stats from real data ────────────────────────────────
+            brand_rows = []
+            for brand in selected_brands:
+                df_b = df_seg[df_seg["Brand"] == brand]["CO2 (g/km)"].dropna()
+                if len(df_b) == 0:
+                    continue
+                # Typical vehicle for this brand in segment (median mass/power/gears)
+                df_bv = df_seg[df_seg["Brand"] == brand].copy()
+                b_mass  = float(df_bv["Empty Mass Euro Avg (kg)"].median())
+                b_power = float(df_bv["Maximum Power (kW)"].median())
+                b_gears = float(df_bv["GearCount"].median()) if "GearCount" in df_bv.columns else sim_gears
+                b_gtype = str(df_bv["GearType"].mode().iloc[0]) if "GearType" in df_bv.columns and len(df_bv) > 0 else sim_gtype
+
+                # Model prediction for this brand's typical vehicle
+                b_row = sim_row.copy()
+                b_row["Empty Mass Euro Avg (kg)"] = b_mass
+                b_row["Maximum Power (kW)"]       = b_power
+                if "GearCount" in b_row: b_row["GearCount"] = b_gears
+                if "GearType"  in b_row: b_row["GearType"]  = b_gtype
+                b_pred = float(fitted[best_model_name].predict(pd.DataFrame([b_row]))[0])
+
+                brand_rows.append({
+                    "Brand":        brand,
+                    "N_models":     len(df_b),
+                    "Real_Median":  df_b.median(),
+                    "Real_P25":     df_b.quantile(0.25),
+                    "Real_P75":     df_b.quantile(0.75),
+                    "Real_Min":     df_b.min(),
+                    "Real_Max":     df_b.max(),
+                    "Model_Pred":   b_pred,
+                    "Typical_Mass": b_mass,
+                    "Typical_kW":   b_power,
+                })
+
+            if not brand_rows:
+                st.warning("No data available for the selected brands in this segment.")
+            else:
+                brand_df = pd.DataFrame(brand_rows).sort_values("Real_Median")
+
+                # ── Metric cards ──────────────────────────────────────────────
+                n_cols = len(brand_df)
+                metric_cols = st.columns(n_cols)
+                best_brand = brand_df.iloc[0]["Brand"]
+                for col_ui, (_, row) in zip(metric_cols, brand_df.iterrows()):
+                    col_ui.markdown(
+                        f"<div style='background:#1A1D27;border:1px solid #2A2D3A;"
+                        f"border-top:4px solid {brand_colors[row['Brand']]};"
+                        f"border-radius:10px;padding:1rem;text-align:center;'>"
+                        f"<div style='font-size:.68rem;font-weight:600;color:#7B8094;"
+                        f"text-transform:uppercase;letter-spacing:.09em;margin-bottom:.3rem'>"
+                        f"{row['Brand']}</div>"
+                        f"<div style='font-size:1.8rem;font-weight:900;"
+                        f"color:{brand_colors[row['Brand']]};font-family:monospace'>"
+                        f"{row['Real_Median']:.0f}</div>"
+                        f"<div style='font-size:.72rem;color:#7B8094'>g/km median · {int(row['N_models'])} models</div>"
+                        f"<div style='font-size:.75rem;color:#7B8094;margin-top:.35rem'>"
+                        f"Predicted: <span style='color:#E8EAF0;font-weight:600'>"
+                        f"{row['Model_Pred']:.0f} g/km</span></div>"
+                        f"{'<div style=\"font-size:.68rem;color:#00C8A0;font-weight:600;margin-top:.2rem\">★ Most efficient</div>' if row['Brand'] == best_brand else ''}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                st.markdown(" ")
+
+                # ── Chart 1: Real median + IQR bars with model prediction dots ─
+                fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+                fig.patch.set_facecolor(BG)
+
+                x_pos   = np.arange(len(brand_df))
+                brands  = brand_df["Brand"].tolist()
+                clr_map = [brand_colors[b] for b in brands]
+
+                # Bar = real median, error bars = IQR
+                lower_err = brand_df["Real_Median"] - brand_df["Real_P25"]
+                upper_err = brand_df["Real_P75"]    - brand_df["Real_Median"]
+                axes[0].bar(x_pos, brand_df["Real_Median"], color=clr_map,
+                            alpha=0.7, edgecolor=BG, lw=0, label="Real Median CO₂")
+                axes[0].errorbar(x_pos, brand_df["Real_Median"],
+                                  yerr=[lower_err, upper_err],
+                                  fmt='none', color=TEXT, capsize=5, lw=1.5, alpha=0.6)
+                axes[0].scatter(x_pos, brand_df["Model_Pred"],
+                                color=TEXT, s=60, zorder=5, marker='D',
+                                label="Model Prediction")
+                axes[0].axhline(sim_pred, color=MUTED, lw=1.2, linestyle='--',
+                                 label=f"Sim. setting: {sim_pred:.0f} g/km")
+                axes[0].set_xticks(x_pos)
+                axes[0].set_xticklabels(brands, rotation=20, ha='right')
+                axes[0].set_ylabel("CO₂ (g/km)")
+                axes[0].set_title("Real Median CO₂ + IQR  ◆ Model Prediction")
+                axes[0].legend(fontsize=8)
+
+                # Annotate bars with value
+                for xi, (_, row) in zip(x_pos, brand_df.iterrows()):
+                    axes[0].text(xi, row["Real_Median"] + upper_err.iloc[list(brand_df.index).index(_)] + 1,
+                                  f"{row['Real_Median']:.0f}", ha='center', va='bottom',
+                                  fontsize=9, color=TEXT, fontweight='600')
+
+                # Chart 2: Box plots side by side
+                box_data   = [df_seg[df_seg["Brand"] == b]["CO2 (g/km)"].dropna().values
+                               for b in brands]
+                bp5 = axes[1].boxplot(box_data, patch_artist=True,
+                                       medianprops=dict(color=TEXT, lw=2),
+                                       whiskerprops=dict(color=MUTED, lw=0.8),
+                                       capprops=dict(color=MUTED),
+                                       flierprops=dict(marker='o', alpha=0.35, markersize=3))
+                for i, patch in enumerate(bp5['boxes']):
+                    c = clr_map[i]
+                    patch.set_facecolor(f"{c}40"); patch.set_edgecolor(c)
+                    for fp in bp5['flierprops'] if isinstance(bp5['flierprops'], list) else []:
+                        fp.set_markeredgecolor(c)
+                axes[1].set_xticks(np.arange(1, len(brands)+1))
+                axes[1].set_xticklabels(brands, rotation=20, ha='right')
+                axes[1].axhline(sim_pred, color=MUTED, lw=1.2, linestyle='--',
+                                 label=f"Sim. setting: {sim_pred:.0f} g/km")
+                axes[1].set_ylabel("CO₂ (g/km)")
+                axes[1].set_title("Full CO₂ Distribution per Brand")
+                axes[1].legend(fontsize=8)
+
+                filter_lbl = f"{sim_fuel} · {sim_body} · {kw_lo}–{kw_hi} kW"
+                fig.suptitle(f"Brand Comparison — {filter_lbl}", fontsize=13, color=TEXT)
+                plt.tight_layout(rect=[0, 0, 1, 0.95])
+                st.pyplot(fig)
+                plt.close()
+
+                # ── Power sensitivity overlaid per brand ──────────────────────
+                st.markdown("##### Power Sensitivity per Brand")
+                st.caption(
+                    "How does each brand's predicted CO₂ change as power increases? "
+                    "All other features fixed at that brand's typical segment values."
+                )
+                fig, ax = plt.subplots(figsize=(14, 4))
+                fig.patch.set_facecolor(BG)
+
+                pw_range = np.arange(40, 570, 10)
+                for _, row in brand_df.iterrows():
+                    b = row["Brand"]
+                    b_row_base = sim_row.copy()
+                    b_row_base["Empty Mass Euro Avg (kg)"] = row["Typical_Mass"]
+                    if "GearType" in b_row_base:
+                        b_row_base["GearType"] = sim_gtype
+                    pw_preds = []
+                    for p in pw_range:
+                        r2 = b_row_base.copy(); r2["Maximum Power (kW)"] = float(p)
+                        pw_preds.append(float(fitted[best_model_name].predict(pd.DataFrame([r2]))[0]))
+                    ax.plot(pw_range, pw_preds, color=brand_colors[b], lw=2, label=b)
+                    # Mark brand's typical power
+                    ax.scatter([row["Typical_kW"]], [row["Model_Pred"]],
+                                color=brand_colors[b], s=70, zorder=5)
+
+                ax.set_xlabel("Maximum Power (kW)")
+                ax.set_ylabel("Predicted CO₂ (g/km)")
+                ax.set_title("CO₂ vs. Power — per Brand (at brand's typical mass)")
+                ax.legend(fontsize=9, framealpha=0.7)
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close()
+
+                # ── Summary table ─────────────────────────────────────────────
+                with st.expander("📋 Full comparison table"):
+                    disp_df = brand_df[[
+                        "Brand", "N_models", "Real_Median", "Real_P25", "Real_P75",
+                        "Real_Min", "Real_Max", "Model_Pred", "Typical_Mass", "Typical_kW"
+                    ]].copy()
+                    disp_df.columns = [
+                        "Brand", "Models", "Median CO₂", "P25", "P75",
+                        "Min", "Max", "Model Pred.", "Typical Mass (kg)", "Typical kW"
+                    ]
+                    st.dataframe(
+                        disp_df.style.format({
+                            c: "{:.1f}" for c in
+                            ["Median CO₂","P25","P75","Min","Max","Model Pred.",
+                             "Typical Mass (kg)","Typical kW"]
+                        }).highlight_min(subset=["Median CO₂"], color="#00C8A025")
+                         .highlight_max(subset=["Median CO₂"], color="#E8485515"),
+                        use_container_width=True
+                    )
+
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
