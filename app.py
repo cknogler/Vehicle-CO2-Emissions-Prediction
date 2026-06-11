@@ -1608,7 +1608,7 @@ with tabs[6]:
                 f"<strong>{saving_str}</strong>"
                 f"</div></div>",
                 unsafe_allow_html=True
-            )
+            ) 
 
         # ── Detailtabelle ────────────────────────────────────────────────────
         st.markdown("---")
