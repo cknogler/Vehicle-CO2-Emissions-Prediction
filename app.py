@@ -143,30 +143,57 @@ RANDOM_STATE = 42
 
 # ── Minimal scientific matplotlib style ──────────────────────────────────────
 plt.rcParams.update({
+    # Canvas
     "figure.facecolor":    "white",
-    "axes.facecolor":      "white",
-    "axes.edgecolor":      "#D1D5DB",
+    "axes.facecolor":      "#FAFAFA",
+    "savefig.facecolor":   "white",
+
+    # Spines
+    "axes.edgecolor":      "#E5E7EB",
     "axes.spines.top":     False,
     "axes.spines.right":   False,
     "axes.spines.left":    True,
     "axes.spines.bottom":  True,
+
+    # Grid
     "axes.grid":           True,
-    "grid.color":          "#F3F4F6",
-    "grid.linewidth":      0.7,
+    "grid.color":          "#FFFFFF",
+    "grid.linewidth":      1.0,
+    "grid.alpha":          1.0,
+
+    # Typography
     "axes.titlesize":      12,
-    "axes.titleweight":    "bold",
+    "axes.titleweight":    "semibold",
     "axes.titlecolor":     "#111827",
+    "axes.titlepad":       10,
     "axes.labelsize":      10,
-    "axes.labelcolor":     "#374151",
-    "xtick.color":         "#6B7280",
-    "ytick.color":         "#6B7280",
+    "axes.labelcolor":     "#4B5563",
+    "axes.labelpad":       6,
+
+    # Ticks
+    "xtick.color":         "#9CA3AF",
+    "ytick.color":         "#9CA3AF",
     "xtick.labelsize":     9,
     "ytick.labelsize":     9,
+    "xtick.major.pad":     4,
+    "ytick.major.pad":     4,
+    "xtick.direction":     "out",
+    "ytick.direction":     "out",
+
+    # Legend
     "legend.frameon":      True,
     "legend.framealpha":   1.0,
     "legend.edgecolor":    "#E5E7EB",
     "legend.fontsize":     9,
+    "legend.title_fontsize": 9,
+
+    # Lines
+    "lines.linewidth":     2.0,
+    "patch.linewidth":     0.5,
+
+    # Figure
     "figure.dpi":          110,
+    "figure.constrained_layout.use": False,
     "font.family":         "sans-serif",
 })
 
@@ -534,7 +561,7 @@ with tabs[0]:
     if len(missing_sorted) > 0:
         cols_with_na = missing_sorted.index.tolist()
         from matplotlib.colors import ListedColormap
-        cmap_mv = ListedColormap(["lightgrey", "#1f77b4"])
+        cmap_mv = ListedColormap(["#F3F4F6", BLUE])
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
         sns.heatmap(df[cols_with_na].isna(), cmap=cmap_mv, cbar=False,
@@ -575,7 +602,7 @@ with tabs[1]:
 
     co2_data = df['CO2 (g/km)'].dropna()
 
-    axes[0,0].hist(co2_data, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_data, bins=50, alpha=0.7, color=BLUE, edgecolor='white')
     axes[0,0].axvline(co2_data.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_data.mean():.1f}')
     axes[0,0].axvline(co2_data.median(), color='green', linestyle='--',
@@ -680,16 +707,16 @@ with tabs[1]:
     axes[1,1].set_title('Combined Consumption vs CO2 Emissions', fontsize=14)
 
     sns.boxplot(data=df, x='Fuel', y='CO2 (g/km)', ax=axes[2,0],
-                hue='Fuel', palette='pastel', legend=False)
+                hue='Fuel', palette='muted', legend=False)
     axes[2,0].set_title('CO2 Emissions by Fuel Type', fontsize=14)
 
     sns.boxplot(data=df, x='Body', y='CO2 (g/km)', ax=axes[2,1],
-                hue='Body', palette='pastel', legend=False)
+                hue='Body', palette='muted', legend=False)
     axes[2,1].set_title('CO2 Emissions by Body Type', fontsize=14)
     axes[2,1].tick_params(axis='x', rotation=45)
 
     sns.boxplot(data=df, x='Gearbox', y='CO2 (g/km)', ax=axes[3,0],
-                hue='Gearbox', palette='pastel', legend=False)
+                hue='Gearbox', palette='muted', legend=False)
     axes[3,0].set_title('CO2 Emissions by Gearbox Type', fontsize=14)
     axes[3,0].tick_params(axis='x', rotation=45)
 
@@ -723,7 +750,7 @@ with tabs[2]:
     spearman_corr = df_numeric.corr(method='spearman')
 
     fig, ax = plt.subplots(1, 2, figsize=(20, 8))
-    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='coolwarm', ax=ax[0])
+    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='RdBu_r', ax=ax[0])
     ax[0].set_title('Pearson Correlation Heatmap (Numeric-Only)')
     sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax[1])
     ax[1].set_title('Spearman Correlation Heatmap (Numeric-Only)')
@@ -797,12 +824,12 @@ with tabs[2]:
         axes[0,1].set_xlabel(var_col); axes[0,1].set_ylabel('CO2 (g/km)')
         plt.colorbar(hb, ax=axes[0,1])
 
-        axes[1,0].hist(d[var_col], bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+        axes[1,0].hist(d[var_col], bins=50, alpha=0.7, color=BLUE, edgecolor='white')
         axes[1,0].set_xlabel(var_col); axes[1,0].set_ylabel('Frequency')
         axes[1,0].set_title(f'Distribution of {var_col}')
         axes[1,0].grid(True, alpha=0.3)
 
-        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.7, color='lightcoral', edgecolor='black')
+        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.7, color='#F87171', edgecolor='white')
         axes[1,1].set_xlabel('CO2 (g/km)'); axes[1,1].set_ylabel('Frequency')
         axes[1,1].set_title('Distribution of CO2 Emissions')
         axes[1,1].grid(True, alpha=0.3)
@@ -891,7 +918,8 @@ with tabs[3]:
     fig, ax = plt.subplots(figsize=(10, 6))
     categories = ['Total Records in Data', 'Unique Mechanical Designs']
     values = [total_obs, unique_designs]
-    sns.barplot(x=categories, y=values, palette="viridis", ax=ax, hue=categories, legend=False)
+    colors_bar = [BLUE, "#93C5FD"]
+    sns.barplot(x=categories, y=values, palette=colors_bar, ax=ax, hue=categories, legend=False)
     for i, v in enumerate(values):
         ax.text(i, v + total_obs * 0.01, f'{v:,}', ha='center', va='bottom',
                 fontweight='bold', fontsize=14)
@@ -914,7 +942,7 @@ with tabs[3]:
     fig.suptitle('CO2 Emissions Analysis (Deduplicated Data)', fontsize=16, fontweight='bold')
 
     co2_u = df_unique['CO2 (g/km)'].dropna()
-    axes[0,0].hist(co2_u, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_u, bins=50, alpha=0.7, color=BLUE, edgecolor='white')
     axes[0,0].axvline(co2_u.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_u.mean():.1f}')
     axes[0,0].axvline(co2_u.median(), color='green', linestyle='--',
@@ -1042,7 +1070,7 @@ with tabs[4]:
         df_cluster_raw = run_clustering(df_unique, k=k)
 
     cluster_order = sorted(df_cluster_raw['Cluster'].unique())
-    palette_clust = sns.color_palette("Paired", n_colors=len(cluster_order))
+    palette_clust = sns.color_palette("tab10", n_colors=len(cluster_order))
     cluster_colors = dict(zip(cluster_order, palette_clust))
 
     st.subheader("Cluster Sizes")
@@ -1552,8 +1580,8 @@ with tabs[6]:
 
         bar_colors = []
         for rank in range(len(plot_b)):
-            if rank < 3:          bar_colors.append("#2ecc71")
-            elif rank >= top_n-3: bar_colors.append("#e74c3c")
+            if rank < 3:          bar_colors.append("#059669")
+            elif rank >= top_n-3: bar_colors.append("#DC2626")
             else:                 bar_colors.append(BLUE)
 
         fig, ax = plt.subplots(figsize=(11, max(5, top_n * 0.55)))
@@ -1609,7 +1637,7 @@ with tabs[6]:
                 f"Min {rb['CO2_Min']:.0f} · Max {rb['CO2_Max']:.0f} g/km<br>"
                 f"{int(rb['Modelle'])} models in segment<br>"
                 f"<strong>{saving_str}</strong>"
-                f"</div></div>", 
+                f"</div></div>",
                 unsafe_allow_html=True
             )
 
