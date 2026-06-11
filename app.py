@@ -883,16 +883,23 @@ with tabs[3]:
         "Comparing both reveals where non-linear relationships exist \u2014 "
         "indicated by large differences between Pearson and Spearman coefficients."
     )
-    # Use deduplicated dataset for correlation analysis — avoids bias from duplicate entries
-    df_numeric = df_unique.select_dtypes(include=np.number).drop(columns=['Clone_Count'], errors='ignore').copy()
-    pearson_corr  = df_numeric.corr(method='pearson')
-    spearman_corr = df_numeric.corr(method='spearman')
+    # Heatmap based on deduplicated dataset (n=5,700 unique configurations)
+    df_numeric_heat = df_unique.select_dtypes(include=np.number).drop(
+        columns=["Clone_Count", "GearCount"], errors="ignore").copy()
+    pearson_corr  = df_numeric_heat.corr(method='pearson')
+    spearman_corr = df_numeric_heat.corr(method='spearman')
 
-    fig, ax = plt.subplots(1, 2, figsize=(20, 8))
-    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='RdBu_r', ax=ax[0])
-    ax[0].set_title('Pearson Correlation Heatmap (Numeric-Only)')
-    sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax[1])
-    ax[1].set_title('Spearman Correlation Heatmap (Numeric-Only)')
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='RdBu_r',
+                annot_kws={"size": 10}, linewidths=0.4, ax=ax[0])
+    ax[0].set_title(f'Pearson Correlation (deduplicated, n={len(df_unique):,})')
+    ax[0].tick_params(axis='x', rotation=45, labelsize=9)
+    ax[0].tick_params(axis='y', rotation=0,  labelsize=9)
+    sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu',
+                annot_kws={"size": 10}, linewidths=0.4, ax=ax[1])
+    ax[1].set_title(f'Spearman Correlation (deduplicated, n={len(df_unique):,})')
+    ax[1].tick_params(axis='x', rotation=45, labelsize=9)
+    ax[1].tick_params(axis='y', rotation=0,  labelsize=9)
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     st.caption(
@@ -1218,9 +1225,13 @@ with tabs[5]:
     st.header("🤖 Predictive Modeling")
 
     st.markdown("""
-    > **Research Question:** What is the relative contribution of vehicle mass, engine power,
-    > fuel type, body style and gearbox type in explaining CO₂ emissions,
+    > **Research Question:** Which technical vehicle characteristics (mass, engine power,
+    > fuel type, body style, gearbox type) allow the most accurate **prediction** of CO₂ emissions,
     > and which minimal feature set achieves the best predictive performance?
+    >
+    > *Note: this is a predictive model, not a causal one. Feature importance reflects
+    > predictive association, not causal effect — engine power, for example, acts primarily
+    > as a proxy for vehicle class and mass rather than a direct driver of CO₂.*
     """)
 
     with st.spinner("Modelle werden trainiert (Feature Sets + CV + 5 Modelle) …"):
