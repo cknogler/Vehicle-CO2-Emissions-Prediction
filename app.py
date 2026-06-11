@@ -40,14 +40,105 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-BLUE = "#1f77b4"
+# ── Design System ────────────────────────────────────────────────────────────
+NAVY    = "#1B2A4A"
+TEAL    = "#0D9488"
+AMBER   = "#F59E0B"
+SLATE   = "#64748B"
+LIGHT   = "#F8FAFC"
+GREEN   = "#10B981"
+RED_C   = "#EF4444"
+BLUE    = TEAL   # keep legacy alias
 RANDOM_STATE = 42
 
+# ── Global CSS ────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', sans-serif; }
+#MainMenu {visibility: hidden;}
+footer    {visibility: hidden;}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1B2A4A 0%, #0f1e36 100%);
+    border-right: none;
+}
+[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
+[data-testid="stSidebar"] .stMarkdown a { color: #5eead4 !important; }
+[data-testid="stSidebar"] hr { border-color: #2d3f5e !important; }
+[data-testid="stSidebar"] .stCaption { color: #94a3b8 !important; }
+
+[data-testid="stTabs"] [role="tablist"] { gap: 4px; border-bottom: 2px solid #e2e8f0; }
+[data-testid="stTabs"] [role="tab"] {
+    background: transparent; border-radius: 8px 8px 0 0;
+    padding: 8px 18px; font-weight: 500; color: #64748B; border: none; transition: all .2s;
+}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    background: #0D9488; color: white !important; font-weight: 600;
+}
+[data-testid="stTabs"] [role="tab"]:hover { background: #f1f5f9; color: #1B2A4A; }
+
+[data-testid="metric-container"] {
+    background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+    padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); transition: box-shadow .2s;
+}
+[data-testid="metric-container"]:hover { box-shadow: 0 4px 12px rgba(13,148,136,.15); }
+[data-testid="stMetricLabel"] {
+    font-size: 12px !important; font-weight: 600 !important;
+    text-transform: uppercase; letter-spacing: .05em; color: #64748B !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 26px !important; font-weight: 700 !important; color: #1B2A4A !important;
+}
+
+[data-testid="stExpander"] { border: 1px solid #e2e8f0 !important; border-radius: 10px !important; margin-bottom: 6px; }
+[data-testid="stExpander"] summary { font-weight: 600; color: #1B2A4A; }
+[data-testid="stDataFrame"] { border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; }
+[data-testid="stAlert"] { border-radius: 10px !important; }
+[data-testid="stSlider"] [role="slider"] { background-color: #0D9488 !important; }
+
+[data-testid="stFormSubmitButton"] button {
+    background: linear-gradient(135deg, #0D9488, #0f766e) !important;
+    color: white !important; border: none !important; border-radius: 8px !important;
+    font-weight: 600 !important; transition: all .2s !important;
+}
+[data-testid="stFormSubmitButton"] button:hover {
+    transform: translateY(-1px); box-shadow: 0 4px 12px rgba(13,148,136,.4) !important;
+}
+
+h1 { color: #1B2A4A !important; font-weight: 700 !important; }
+h2 { color: #1B2A4A !important; font-weight: 600 !important; }
+h3 { color: #334155 !important; font-weight: 600 !important; }
+hr { border-color: #f1f5f9 !important; margin: 1.5rem 0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── Matplotlib global theme ───────────────────────────────────────────────────
 plt.rcParams.update({
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.titlesize": 14,
-    "axes.labelsize": 11,
+    "figure.facecolor":   "#ffffff",
+    "axes.facecolor":     "#ffffff",
+    "axes.edgecolor":     "#e2e8f0",
+    "axes.spines.top":    False,
+    "axes.spines.right":  False,
+    "axes.spines.left":   True,
+    "axes.spines.bottom": True,
+    "axes.grid":          True,
+    "grid.color":         "#f1f5f9",
+    "grid.linewidth":     0.8,
+    "axes.titlesize":     14,
+    "axes.titleweight":   "bold",
+    "axes.titlecolor":    NAVY,
+    "axes.labelsize":     11,
+    "axes.labelcolor":    SLATE,
+    "xtick.color":        SLATE,
+    "ytick.color":        SLATE,
+    "xtick.labelsize":    10,
+    "ytick.labelsize":    10,
+    "legend.frameon":     True,
+    "legend.framealpha":  0.9,
+    "legend.edgecolor":   "#e2e8f0",
+    "legend.fontsize":    10,
+    "figure.dpi":         120,
+    "font.family":        "sans-serif",
 })
 
 CSV_URL = (
@@ -356,14 +447,24 @@ def train_all_models(_df: pd.DataFrame):
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("🚗 CO₂ Dashboard")
-    st.markdown("**ADEME Car Labelling Dataset**")
+    st.markdown("""
+    <div style='padding: 8px 0 16px 0;'>
+        <div style='font-size: 26px; font-weight: 800; color: #5eead4; letter-spacing: -0.5px;'>
+            🚗 CO₂ Dashboard
+        </div>
+        <div style='font-size: 11px; color: #94a3b8; margin-top: 4px; font-weight: 600;
+                    text-transform: uppercase; letter-spacing: 0.08em;'>
+            ADEME · France 2013
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("---")
-    st.caption("Dataset is loaded automatically from the repository.")
-    uploaded = st.file_uploader("Upload your own CSV (optional)", type=["csv"])
+    st.markdown("<div style='font-size:11px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;'>Data Source</div>", unsafe_allow_html=True)
+    st.caption("Auto-loaded from GitHub. Upload your own CSV to override.")
+    uploaded = st.file_uploader("Upload CSV (optional)", type=["csv"], label_visibility="collapsed")
     st.markdown("---")
-    st.markdown("**Projekt:** [GitHub ↗](https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction)",
-                unsafe_allow_html=True)
+    st.markdown("<div style='font-size:11px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;'>Project</div>", unsafe_allow_html=True)
+    st.markdown("[GitHub ↗ cknogler/Vehicle-CO2-Emissions-Prediction](https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction)")
 
 # ── Load data ────────────────────────────────────────────────────────────────
 source = uploaded.read() if uploaded is not None else CSV_URL
@@ -379,23 +480,57 @@ with st.spinner("Loading and preprocessing data …"):
 
 with st.sidebar:
     st.markdown("---")
-    st.caption(f"Raw data: {len(df):,} rows")
-    st.caption(f"Unique (ES/GO): {len(df_unique):,} configurations")
+    st.markdown("<div style='font-size:11px; color:#94a3b8; font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;'>Dataset Stats</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='display:flex; flex-direction:column; gap:6px;'>
+        <div style='background:#1e3a5f; border-radius:8px; padding:10px 14px;'>
+            <div style='font-size:18px; font-weight:700; color:#5eead4;'>{len(df):,}</div>
+            <div style='font-size:11px; color:#94a3b8;'>Raw records</div>
+        </div>
+        <div style='background:#1e3a5f; border-radius:8px; padding:10px 14px;'>
+            <div style='font-size:18px; font-weight:700; color:#5eead4;'>{len(df_unique):,}</div>
+            <div style='font-size:11px; color:#94a3b8;'>Unique ES/GO configs</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ── Page banner ──────────────────────────────────────────────────────────────
+st.markdown("""
+<div style='background: linear-gradient(135deg, #1B2A4A 0%, #0D4A43 100%);
+            border-radius: 16px; padding: 28px 36px; margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(27,42,74,.15);'>
+    <div style='display:flex; align-items:center; gap:16px;'>
+        <div style='font-size:48px;'>🚗</div>
+        <div>
+            <div style='font-size:26px; font-weight:800; color:white; letter-spacing:-0.5px;'>
+                Vehicle CO₂ Emissions Dashboard
+            </div>
+            <div style='font-size:14px; color:#5eead4; margin-top:4px; font-weight:500;'>
+                ADEME Car Labelling Dataset · France 2013 · Predictive Analytics & Fleet Intelligence
+            </div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 tabs = st.tabs([
-    "Preprocessing",
-    "EDA",
-    "Correlation Analysis",
-    "Deduplication",
-    "Clustering",
-    "Prediction",
-    "CO₂ Calculator",
+    "📋 Preprocessing",
+    "📊 EDA",
+    "🔗 Correlation",
+    "🔍 Deduplication",
+    "🗂️ Clustering",
+    "🤖 Prediction",
+    "🧮 CO₂ Calculator",
 ])
 
 # ═══════════════════════ TAB 0 – PREPROCESSING ═══════════════════════════════
 with tabs[0]:
-    st.header("📋 Preprocessing & Dataset Overview")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>📋 Preprocessing & Dataset Overview</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Data cleaning, imputation and transformation pipeline</div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("""
     This tab documents every transformation applied to the raw ADEME dataset
@@ -405,19 +540,26 @@ with tabs[0]:
     """)
 
     # ── 1. Dataset at a glance ────────────────────────────────────────────────
-    st.subheader("1️ Dataset at a Glance")
+    st.markdown("""
+    <div style='font-size:16px; font-weight:700; color:#1B2A4A; margin-bottom:12px;
+                text-transform:uppercase; letter-spacing:.05em; font-size:12px; color:#64748B;'>
+        1 · Dataset at a Glance
+    </div>""", unsafe_allow_html=True)
     n_esgo = len(df_combus)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Rows",           f"{len(df):,}")
-    c2.metric("Columns",              len(df.columns))
-    c3.metric("ES+GO Vehicles",       f"{n_esgo:,}")
-    c4.metric("Unique Configurations",f"{len(df_unique):,}")
+    c1.metric("Total Rows",            f"{len(df):,}")
+    c2.metric("Columns",               len(df.columns))
+    c3.metric("ES+GO Vehicles",        f"{n_esgo:,}")
+    c4.metric("Unique Configurations", f"{len(df_unique):,}")
 
     st.markdown("""
-    **Source:** ADEME Car Labelling Dataset — official French vehicle emission registry (2013).
-    Contains all vehicles type-approved for sale in France, including passenger cars,
-    vans, and electric vehicles. All column names were translated from French to English.
-    """)
+    <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+                padding:14px 18px; margin-top:12px; font-size:13px; color:#475569;'>
+        <strong style='color:#1B2A4A;'>Source:</strong> ADEME Car Labelling Dataset —
+        official French vehicle emission registry (2013). Contains all vehicles type-approved
+        for sale in France, including passenger cars, vans, and electric vehicles.
+        All column names were translated from French to English.
+    </div>""", unsafe_allow_html=True)
 
     # ── 2. Preprocessing pipeline ────────────────────────────────────────────
     st.markdown("---")
@@ -538,7 +680,11 @@ with tabs[0]:
 
 # ═══════════════════════ TAB 1 – EDA ═════════════════════════════════════════
 with tabs[1]:
-    st.header("Fleet-wide Distribution and Frequency Analysis")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>📊 Exploratory Data Analysis</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Fleet-wide distributions, frequency analysis and emission drivers</div>
+    </div>""", unsafe_allow_html=True)
 
     # CO2 analysis before deduplication (2x2 wie im Notebook)
     st.subheader("CO₂ Emissions Analysis – Target Variable (before Deduplication)")
@@ -547,7 +693,7 @@ with tabs[1]:
 
     co2_data = df['CO2 (g/km)'].dropna()
 
-    axes[0,0].hist(co2_data, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_data, bins=50, alpha=0.7, color='#bfdbfe', edgecolor='black')
     axes[0,0].axvline(co2_data.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_data.mean():.1f}')
     axes[0,0].axvline(co2_data.median(), color='green', linestyle='--',
@@ -652,16 +798,16 @@ with tabs[1]:
     axes[1,1].set_title('Combined Consumption vs CO2 Emissions', fontsize=14)
 
     sns.boxplot(data=df, x='Fuel', y='CO2 (g/km)', ax=axes[2,0],
-                hue='Fuel', palette='pastel', legend=False)
+                hue='Fuel', palette='coolwarm', legend=False)
     axes[2,0].set_title('CO2 Emissions by Fuel Type', fontsize=14)
 
     sns.boxplot(data=df, x='Body', y='CO2 (g/km)', ax=axes[2,1],
-                hue='Body', palette='pastel', legend=False)
+                hue='Body', palette='coolwarm', legend=False)
     axes[2,1].set_title('CO2 Emissions by Body Type', fontsize=14)
     axes[2,1].tick_params(axis='x', rotation=45)
 
     sns.boxplot(data=df, x='Gearbox', y='CO2 (g/km)', ax=axes[3,0],
-                hue='Gearbox', palette='pastel', legend=False)
+                hue='Gearbox', palette='coolwarm', legend=False)
     axes[3,0].set_title('CO2 Emissions by Gearbox Type', fontsize=14)
     axes[3,0].tick_params(axis='x', rotation=45)
 
@@ -679,7 +825,11 @@ with tabs[1]:
 
 # ═══════════════════════ TAB 2 – KORRELATIONEN ═══════════════════════════════
 with tabs[2]:
-    st.header("Correlation & Statistical Analysis")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>🔗 Correlation & Statistical Analysis</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Pearson vs Spearman — linear and monotonic relationships (deduplicated)</div>
+    </div>""", unsafe_allow_html=True)
 
     # ── Pearson + Spearman heatmap (deduplicated) ─────────────────────────────
     st.subheader("Pearson vs. Spearman Correlation Heatmap")
@@ -774,12 +924,12 @@ with tabs[2]:
         axes[0,1].set_xlabel(var_col); axes[0,1].set_ylabel('CO2 (g/km)')
         plt.colorbar(hb, ax=axes[0,1])
 
-        axes[1,0].hist(d[var_col], bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+        axes[1,0].hist(d[var_col], bins=50, alpha=0.7, color='#bfdbfe', edgecolor='black')
         axes[1,0].set_xlabel(var_col); axes[1,0].set_ylabel('Frequency')
         axes[1,0].set_title(f'Distribution of {var_col}')
         axes[1,0].grid(True, alpha=0.3)
 
-        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.7, color='lightcoral', edgecolor='black')
+        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.7, color='#fca5a5', edgecolor='black')
         axes[1,1].set_xlabel('CO2 (g/km)'); axes[1,1].set_ylabel('Frequency')
         axes[1,1].set_title('Distribution of CO2 Emissions')
         axes[1,1].grid(True, alpha=0.3)
@@ -799,7 +949,11 @@ with tabs[2]:
 
 # ═══════════════════════ TAB 3 – DEDUPLICATION ═══════════════════════════════
 with tabs[3]:
-    st.header("Data Deduplication – Unique Mechanical Configurations")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>🔍 Data Deduplication</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Unique mechanical configurations — removing registry duplicates</div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("""
     ### Why deduplicate?
@@ -880,7 +1034,7 @@ with tabs[3]:
     fig.suptitle('CO2 Emissions Analysis (Deduplicated Data)', fontsize=16, fontweight='bold')
 
     co2_u = df_unique['CO2 (g/km)'].dropna()
-    axes[0,0].hist(co2_u, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_u, bins=50, alpha=0.7, color='#bfdbfe', edgecolor='black')
     axes[0,0].axvline(co2_u.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_u.mean():.1f}')
     axes[0,0].axvline(co2_u.median(), color='green', linestyle='--',
@@ -966,7 +1120,11 @@ with tabs[3]:
 
 # ═══════════════════════ TAB 4 – CLUSTERING ══════════════════════════════════
 with tabs[4]:
-    st.header("K-Prototypes Clustering")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>🗂️ K-Prototypes Clustering</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Natural vehicle segments from mixed numeric + categorical features</div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("""
     > **Research Question:** Which natural vehicle segments can be identified based on
@@ -1193,7 +1351,11 @@ with tabs[4]:
 
 # ═══════════════════════ TAB 5 – PREDICTION ══════════════════════════════════
 with tabs[5]:
-    st.header("Predictive Modeling")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>🤖 Predictive Modeling</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Feature set selection, model comparison, interpretability & live simulator</div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("""
     > **Research Question:** What is the relative contribution of vehicle mass, engine power,
@@ -1450,7 +1612,7 @@ with tabs[5]:
                     "C (121–140)" if sim_pred <= 140 else
                     "D (141–160)" if sim_pred <= 160 else
                     "E (161–200)" if sim_pred <= 200 else "F/G (>200)")
-        box_color = "green" if sim_pred <= 120 else "orange" if sim_pred <= 160 else "red"
+        box_color = "#10B981" if sim_pred <= 120 else "#F59E0B" if sim_pred <= 160 else "#EF4444"
 
         st.markdown(
             f"<div style='background:{box_color}22;border-left:5px solid {box_color};"
@@ -1530,7 +1692,11 @@ with tabs[5]:
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
-    st.header("CO₂ Calculator & Brand Comparison")
+    st.markdown("""
+    <div style='border-left: 4px solid #0D9488; padding: 4px 0 4px 16px; margin-bottom: 20px;'>
+        <div style='font-size:22px; font-weight:700; color:#1B2A4A;'>🧮 CO₂ Calculator & Brand Comparison</div>
+        <div style='font-size:13px; color:#64748B; margin-top:2px;'>Real-data segment benchmarks and brand efficiency ranking</div>
+    </div>""", unsafe_allow_html=True)
     st.markdown(
         "Choose your vehicle by **everyday criteria** — "
         "the app shows the **real CO₂ median** from comparable vehicles "
@@ -1669,7 +1835,7 @@ with tabs[6]:
                  "C (121–140)"   if co2_median <= 140 else
                  "D (141–160)"   if co2_median <= 160 else
                  "E (161–200)"   if co2_median <= 200 else "F/G (>200)")
-        color = "green" if co2_median <= 120 else "orange" if co2_median <= 160 else "red"
+        color = "#10B981" if co2_median <= 120 else "#F59E0B" if co2_median <= 160 else "#EF4444"
 
         st.markdown("---")
         st.subheader("Result")
@@ -1714,7 +1880,7 @@ with tabs[6]:
         # ── Segment distribution ────────────────────────────────────────────
         fig, ax = plt.subplots(figsize=(10, 3))
         ax.hist(df_unique["CO2 (g/km)"].dropna(), bins=60,
-                color="lightgrey", alpha=0.7, label="All vehicles")
+                color='#e2e8f0', alpha=0.7, label="All vehicles")
         ax.hist(co2_vals, bins=30, color=color, alpha=0.75,
                 label=f"{body_sel} · {antrieb} ({n_match} vehicles)")
         ax.axvline(co2_median, color=color, lw=2.5, linestyle="--",
