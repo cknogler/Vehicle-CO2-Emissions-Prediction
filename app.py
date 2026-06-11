@@ -1,7 +1,7 @@
 """
 app.py  –  Vehicle CO₂ Emissions Dashboard
 Streamlit App – basierend auf dem originalen Notebook-Code
-ADEME Car Labelling Dataset (cl_JUIN_2013-complet3.csv)
+ADEME Car Labelling Dataset (cl_JUIN_2013-complet3.csv) 
 """
 import io
 import urllib.request
