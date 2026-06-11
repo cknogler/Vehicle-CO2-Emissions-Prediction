@@ -40,14 +40,46 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-BLUE = "#1f77b4"
+# ── Scientific UI ───────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+html, body, [class*="css"] { font-family: "Inter", "Segoe UI", system-ui, sans-serif; font-size: 14px; color: #111827; }
+#MainMenu, footer { visibility: hidden; }
+[data-testid="stSidebar"] { background: #FAFAFA; border-right: 1px solid #E5E7EB; }
+[data-testid="stTabs"] [role="tablist"] { border-bottom: 1px solid #E5E7EB; gap: 0; background: transparent; }
+[data-testid="stTabs"] [role="tab"] { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 18px; font-size: 12px; font-weight: 500; color: #9CA3AF; margin-bottom: -1px; }
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] { color: #111827 !important; border-bottom: 2px solid #111827; font-weight: 600; }
+[data-testid="metric-container"] { background: transparent; border: none; border-top: 1px solid #E5E7EB; padding: 10px 0 6px 0; }
+[data-testid="stMetricLabel"] { font-size: 10px !important; font-weight: 600 !important; text-transform: uppercase; letter-spacing: .07em; color: #9CA3AF !important; }
+[data-testid="stMetricValue"] { font-size: 26px !important; font-weight: 700 !important; color: #111827 !important; }
+[data-testid="stExpander"] { border: 1px solid #E5E7EB !important; border-radius: 4px !important; box-shadow: none !important; }
+[data-testid="stFormSubmitButton"] button { background: #111827 !important; color: white !important; border: none !important; border-radius: 4px !important; font-weight: 600 !important; }
+[data-testid="stFormSubmitButton"] button:hover { background: #374151 !important; }
+h1 { font-size: 22px !important; font-weight: 700 !important; color: #111827 !important; }
+h2 { font-size: 17px !important; font-weight: 700 !important; color: #111827 !important; }
+h3 { font-size: 14px !important; font-weight: 600 !important; color: #374151 !important; }
+hr { border-color: #F3F4F6 !important; margin: 1rem 0 !important; }
+[data-testid="stDataFrame"] { border: 1px solid #E5E7EB; border-radius: 4px; }
+</style>
+""", unsafe_allow_html=True)
+
+BLUE         = "#2563EB"
+ACCENT       = "#DC2626"
+NEUTRAL      = "#6B7280"
 RANDOM_STATE = 42
 
 plt.rcParams.update({
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.titlesize": 14,
-    "axes.labelsize": 11,
+    "figure.facecolor": "white", "axes.facecolor": "#FAFAFA", "savefig.facecolor": "white",
+    "axes.edgecolor": "#E5E7EB", "axes.spines.top": False, "axes.spines.right": False,
+    "axes.spines.left": True, "axes.spines.bottom": True,
+    "axes.grid": True, "grid.color": "#FFFFFF", "grid.linewidth": 1.0,
+    "axes.titlesize": 12, "axes.titleweight": "semibold", "axes.titlecolor": "#111827",
+    "axes.titlepad": 10, "axes.labelsize": 10, "axes.labelcolor": "#4B5563", "axes.labelpad": 6,
+    "xtick.color": "#9CA3AF", "ytick.color": "#9CA3AF",
+    "xtick.labelsize": 9, "ytick.labelsize": 9,
+    "legend.frameon": True, "legend.framealpha": 1.0, "legend.edgecolor": "#E5E7EB",
+    "legend.fontsize": 9, "lines.linewidth": 2.0, "patch.linewidth": 0.5,
+    "figure.dpi": 110, "font.family": "sans-serif",
 })
 
 CSV_URL = (
@@ -120,7 +152,7 @@ def load_and_preprocess(source) -> pd.DataFrame:
         if df is not None:
             break
     if df is None:
-        raise ValueError("CSV konnte nicht gelesen werden.")
+        raise ValueError("Could not read CSV file.")
 
     # Rename
     df = df.rename(columns={k: v for k, v in COLUMN_MAPPING.items() if k in df.columns})
@@ -233,7 +265,7 @@ def run_clustering(_df: pd.DataFrame, k: int = 4):
     categorical_idx = [feature_cols.index(col) for col in categorical_cols]
 
     if not KPROTO_AVAILABLE:
-        st.error("kmodes not installed. Please add 'kmodes>=0.12.2' to requirements.txt.")
+        st.error("kmodes nicht installiert. Bitte requirements.txt mit 'kmodes>=0.12.2' updaten.")
         return df_c
 
     kproto = KPrototypes(
@@ -356,36 +388,38 @@ def train_all_models(_df: pd.DataFrame):
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🚗 CO₂ Dashboard")
-    st.caption("ADEME Car Labelling · France 2013")
+    st.title("🚗 CO₂ Dashboard")
+    st.markdown("**ADEME Car Labelling Dataset**")
     st.markdown("---")
-    uploaded = st.file_uploader("Upload CSV (optional)", type=["csv"])
+    st.caption("Datensatz wird automatisch aus dem Repo geladen.")
+    uploaded = st.file_uploader("Eigene CSV hochladen (optional)", type=["csv"])
     st.markdown("---")
-    st.markdown("[GitHub ↗](https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction)", unsafe_allow_html=True)
+    st.markdown("**Projekt:** [GitHub ↗](https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction)",
+                unsafe_allow_html=True)
 
 # ── Load data ────────────────────────────────────────────────────────────────
 source = uploaded.read() if uploaded is not None else CSV_URL
 
-with st.spinner("Loading and preprocessing data …"):
+with st.spinner("Daten werden geladen und vorverarbeitet …"):
     try:
         df      = load_and_preprocess(source)
         df_unique = make_df_unique(df)
         df_combus = df[df['Fuel'].isin(['ES', 'GO'])].copy() if 'Fuel' in df.columns else df
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"Fehler beim Laden: {e}")
         st.stop()
 
 with st.sidebar:
     st.markdown("---")
-    st.caption(f"Raw data: {len(df):,} rows")
-    st.caption(f"Unique (ES/GO): {len(df_unique):,} configurations")
+    st.caption(f"Rohdaten: {len(df):,} Zeilen")
+    st.caption(f"Unique (ES/GO): {len(df_unique):,} Konfigurationen")
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 tabs = st.tabs([
     "📋 Preprocessing",
     "📊 EDA",
-    "🔗 Correlation Analysis",
     "📉 Deduplication",
+    "🔗 Correlation Analysis",
     "🔵 Clustering",
     "🤖 Prediction",
     "🎯 CO₂ Calculator",
@@ -396,11 +430,11 @@ with tabs[0]:
     st.header("📋 Preprocessing & Dataset Overview")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total Rows", f"{len(df):,}")
-    c2.metric("Columns", len(df.columns))
+    c1.metric("Gesamt Zeilen", f"{len(df):,}")
+    c2.metric("Spalten", len(df.columns))
     n_esgo = len(df_combus)
-    c3.metric("ES+GO Vehicles", f"{n_esgo:,}")
-    c4.metric("Unique Configurations", f"{len(df_unique):,}")
+    c3.metric("ES+GO Fahrzeuge", f"{n_esgo:,}")
+    c4.metric("Unique Konfigurationen", f"{len(df_unique):,}")
 
     st.markdown("---")
 
@@ -412,7 +446,7 @@ with tabs[0]:
     if len(missing_sorted) > 0:
         cols_with_na = missing_sorted.index.tolist()
         from matplotlib.colors import ListedColormap
-        cmap_mv = ListedColormap(["lightgrey", "#1f77b4"])
+        cmap_mv = ListedColormap(["#F3F4F6", BLUE])
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
         sns.heatmap(df[cols_with_na].isna(), cmap=cmap_mv, cbar=False,
@@ -428,7 +462,7 @@ with tabs[0]:
         plt.tight_layout()
         st.pyplot(fig); plt.close()
     else:
-        st.success("No missing values after preprocessing!")
+        st.success("Keine fehlenden Werte nach Preprocessing!")
 
     st.markdown("---")
     st.subheader("Dataset Summary")
@@ -438,7 +472,7 @@ with tabs[0]:
     fmt = {c: "{:.2f}" for c in num_cols_desc}
     st.dataframe(desc.style.format(fmt, na_rep="-"), width='stretch')
 
-    st.subheader("First Rows (Sample)")
+    st.subheader("Erste Zeilen")
     st.dataframe(df.head(10), width='stretch')
 
 
@@ -453,7 +487,7 @@ with tabs[1]:
 
     co2_data = df['CO2 (g/km)'].dropna()
 
-    axes[0,0].hist(co2_data, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_data, bins=50, alpha=0.85, color=BLUE, edgecolor='white')
     axes[0,0].axvline(co2_data.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_data.mean():.1f}')
     axes[0,0].axvline(co2_data.median(), color='green', linestyle='--',
@@ -558,16 +592,16 @@ with tabs[1]:
     axes[1,1].set_title('Combined Consumption vs CO2 Emissions', fontsize=14)
 
     sns.boxplot(data=df, x='Fuel', y='CO2 (g/km)', ax=axes[2,0],
-                hue='Fuel', palette='pastel', legend=False)
+                hue='Fuel', palette='muted', legend=False)
     axes[2,0].set_title('CO2 Emissions by Fuel Type', fontsize=14)
 
     sns.boxplot(data=df, x='Body', y='CO2 (g/km)', ax=axes[2,1],
-                hue='Body', palette='pastel', legend=False)
+                hue='Body', palette='muted', legend=False)
     axes[2,1].set_title('CO2 Emissions by Body Type', fontsize=14)
     axes[2,1].tick_params(axis='x', rotation=45)
 
     sns.boxplot(data=df, x='Gearbox', y='CO2 (g/km)', ax=axes[3,0],
-                hue='Gearbox', palette='pastel', legend=False)
+                hue='Gearbox', palette='muted', legend=False)
     axes[3,0].set_title('CO2 Emissions by Gearbox Type', fontsize=14)
     axes[3,0].tick_params(axis='x', rotation=45)
 
@@ -583,8 +617,8 @@ with tabs[1]:
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
 
-# ═══════════════════════ TAB 2 – KORRELATIONEN ═══════════════════════════════
-with tabs[2]:
+# ═══════════════════════ TAB 3 – CORRELATION ANALYSIS ═══════════════════════
+with tabs[3]:
     st.header("🔗 Correlation & Statistical Analysis")
 
     # Pearson + Spearman heatmap (wie im Notebook)
@@ -596,15 +630,17 @@ with tabs[2]:
         "Comparing both reveals where non-linear relationships exist \u2014 "
         "indicated by large differences between Pearson and Spearman coefficients."
     )
-    df_numeric = df.select_dtypes(include=np.number).copy()
-    pearson_corr  = df_numeric.corr(method='pearson')
-    spearman_corr = df_numeric.corr(method='spearman')
+    df_numeric_heat = df_unique.select_dtypes(include=np.number).drop(columns=["Clone_Count","GearCount"], errors="ignore").copy()
+    pearson_corr  = df_numeric_heat.corr(method='pearson')
+    spearman_corr = df_numeric_heat.corr(method='spearman')
 
-    fig, ax = plt.subplots(1, 2, figsize=(20, 8))
-    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='coolwarm', ax=ax[0])
-    ax[0].set_title('Pearson Correlation Heatmap (Numeric-Only)')
-    sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax[1])
-    ax[1].set_title('Spearman Correlation Heatmap (Numeric-Only)')
+    fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+    sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='RdBu_r', annot_kws={"size":10}, linewidths=0.4, ax=ax[0])
+    ax[0].set_title(f'Pearson Correlation (deduplicated, n={len(df_unique):,})')
+    ax[0].tick_params(axis='x', rotation=45, labelsize=9)
+    sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', annot_kws={"size":10}, linewidths=0.4, ax=ax[1])
+    ax[1].set_title(f'Spearman Correlation (deduplicated, n={len(df_unique):,})')
+    ax[1].tick_params(axis='x', rotation=45, labelsize=9)
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     st.caption(
@@ -654,7 +690,7 @@ with tabs[2]:
     ]:
         if var_col not in df_unique.columns:
             continue
-        st.subheader(f"{var_name} vs CO₂ (Deduplicated)")
+        st.subheader(f"{var_name} vs CO₂ (Dedupliziert)")
         d = df_unique[[var_col, 'CO2 (g/km)']].dropna()
         pc, _ = pearsonr(d[var_col], d['CO2 (g/km)'])
         sc, _ = spearmanr(d[var_col], d['CO2 (g/km)'])
@@ -675,12 +711,12 @@ with tabs[2]:
         axes[0,1].set_xlabel(var_col); axes[0,1].set_ylabel('CO2 (g/km)')
         plt.colorbar(hb, ax=axes[0,1])
 
-        axes[1,0].hist(d[var_col], bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+        axes[1,0].hist(d[var_col], bins=50, alpha=0.85, color=BLUE, edgecolor='white')
         axes[1,0].set_xlabel(var_col); axes[1,0].set_ylabel('Frequency')
         axes[1,0].set_title(f'Distribution of {var_col}')
         axes[1,0].grid(True, alpha=0.3)
 
-        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.7, color='lightcoral', edgecolor='black')
+        axes[1,1].hist(d['CO2 (g/km)'], bins=50, alpha=0.85, color='#F87171', edgecolor='white')
         axes[1,1].set_xlabel('CO2 (g/km)'); axes[1,1].set_ylabel('Frequency')
         axes[1,1].set_title('Distribution of CO2 Emissions')
         axes[1,1].grid(True, alpha=0.3)
@@ -698,8 +734,8 @@ with tabs[2]:
         st.markdown("---")
 
 
-# ═══════════════════════ TAB 3 – DEDUPLICATION ═══════════════════════════════
-with tabs[3]:
+# ═══════════════════════ TAB 2 – DEDUPLICATION ══════════════════════════════
+with tabs[2]:
     st.header("📉 Data Deduplication – Unique Mechanical Configurations")
 
     st.markdown("""
@@ -769,7 +805,7 @@ with tabs[3]:
     fig, ax = plt.subplots(figsize=(10, 6))
     categories = ['Total Records in Data', 'Unique Mechanical Designs']
     values = [total_obs, unique_designs]
-    sns.barplot(x=categories, y=values, palette="viridis", ax=ax, hue=categories, legend=False)
+    sns.barplot(x=categories, y=values, palette=[BLUE,"#93C5FD"], ax=ax, hue=categories, legend=False)
     for i, v in enumerate(values):
         ax.text(i, v + total_obs * 0.01, f'{v:,}', ha='center', va='bottom',
                 fontweight='bold', fontsize=14)
@@ -792,7 +828,7 @@ with tabs[3]:
     fig.suptitle('CO2 Emissions Analysis (Deduplicated Data)', fontsize=16, fontweight='bold')
 
     co2_u = df_unique['CO2 (g/km)'].dropna()
-    axes[0,0].hist(co2_u, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
+    axes[0,0].hist(co2_u, bins=50, alpha=0.85, color=BLUE, edgecolor='white')
     axes[0,0].axvline(co2_u.mean(), color='red', linestyle='--',
                       label=f'Mean: {co2_u.mean():.1f}')
     axes[0,0].axvline(co2_u.median(), color='green', linestyle='--',
@@ -849,8 +885,8 @@ with tabs[4]:
     # ── Elbow Method ─────────────────────────────────────────────────────────
     st.subheader("Elbow Method – Optimal Number of Clusters")
     st.markdown(
-        "The Elbow Method computes the **total cost** (intra-cluster distance) "
-        "for k=2 to k=9. The 'elbow' in the cost curve indicates the optimal k."
+        "Die Elbow-Methode berechnet die **Gesamtkosten** (intra-cluster distance) "
+        "für k=2 bis k=9. Der 'Knick' im Kostenverlauf zeigt das optimale k."
     )
 
     @st.cache_data(show_spinner=False)
@@ -883,7 +919,7 @@ with tabs[4]:
             costs.append(model.cost_)
         return list(k_range), costs
 
-    with st.spinner("Computing Elbow Method (k=2–9) …"):
+    with st.spinner("Elbow-Methode wird berechnet (k=2–9) …"):
         elbow_result = compute_elbow(df_unique)
 
     if elbow_result is not None:
@@ -900,9 +936,9 @@ with tabs[4]:
         ax.scatter([elbow_k], [costs[k_range.index(elbow_k)]],
                    color="red", zorder=5, s=120)
 
-        ax.set_xlabel("Number of Clusters (k)")
-        ax.set_ylabel("Cost (intra-cluster distance)")
-        ax.set_title("Elbow Method for K-Prototypes", fontsize=13)
+        ax.set_xlabel("Anzahl Cluster (k)")
+        ax.set_ylabel("Kosten (intra-cluster distance)")
+        ax.set_title("Elbow Method für K-Prototypes", fontsize=13)
         ax.set_xticks(list(k_range))
         ax.legend()
         for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
@@ -911,16 +947,16 @@ with tabs[4]:
         plt.close()
         st.info(f"Elbow method suggests k = {elbow_k}. This analysis uses k = 4 for richer segment granularity.")
     else:
-        st.warning("Elbow Method requires the kmodes package.")
+        st.warning("Elbow-Methode benötigt das kmodes-Paket.")
 
     st.markdown("---")
 
     k = st.slider("Number of Clusters (k)", 2, 8, 4)
-    with st.spinner("Clustering in progress …"):
+    with st.spinner("Clustering läuft …"):
         df_cluster_raw = run_clustering(df_unique, k=k)
 
     cluster_order = sorted(df_cluster_raw['Cluster'].unique())
-    palette_clust = sns.color_palette("Paired", n_colors=len(cluster_order))
+    palette_clust = sns.color_palette("tab10", n_colors=len(cluster_order))
     cluster_colors = dict(zip(cluster_order, palette_clust))
 
     st.subheader("Cluster Sizes")
@@ -1067,18 +1103,22 @@ with tabs[5]:
     st.header("🤖 Predictive Modeling")
 
     st.markdown("""
-    > **Research Question:** What is the relative contribution of vehicle mass, engine power,
-    > fuel type, body style and gearbox type in explaining CO₂ emissions,
+    > **Research Question:** Which technical vehicle characteristics (mass, engine power,
+    > fuel type, body style, gearbox type) allow the most accurate **prediction** of CO₂ emissions,
     > and which minimal feature set achieves the best predictive performance?
+    >
+    > *Note: this is a predictive model, not a causal one. Feature importance reflects
+    > predictive association, not causal effect — engine power acts primarily as a proxy
+    > for vehicle class and mass rather than a direct driver of CO₂.*
     """)
 
-    with st.spinner("Training models (Feature Sets + CV + 5 models) …"):
+    with st.spinner("Modelle werden trainiert (Feature Sets + CV + 5 Modelle) …"):
         try:
             (fitted, results_df, fs_df, best_fs, feature_cols,
              X_train, X_test, y_train, y_test,
              rf_pipe, fi_df, num_f, cat_f) = train_all_models(df_unique)
         except Exception as e:
-            st.error(f"Training failed: {e}")
+            st.error(f"Training fehlgeschlagen: {e}")
             st.stop()
 
     # Random Forest as primary model — cleaner MDI interpretability
@@ -1098,7 +1138,7 @@ with tabs[5]:
     ax.set_title("Feature Set Comparison (5-Fold CV, Random Forest)")
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
-    st.success(f"✅ Best Feature Set: **{best_fs}** | Features: {', '.join(feature_cols)}")
+    st.success(f"✅ Bestes Feature-Set: **{best_fs}** | Features: {', '.join(feature_cols)}")
     st.dataframe(fs_df[["Feature_Set","Features","CV_MAE_mean","CV_MAE_std"]]
                  .style.format({"CV_MAE_mean": "{:.2f}", "CV_MAE_std": "{:.2f}"}),
                  width='stretch')
@@ -1112,7 +1152,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 2. Model Performance ─────────────────────────────────────────────────
-    st.subheader(f"2️⃣ Model Comparison: R² and MAE ({best_fs})")
+    st.subheader(f"2️⃣ Modellvergleich: R² und MAE ({best_fs})")
     st.markdown(
         "Five models are evaluated on the same train/test split (80/20). "
         "**R\u00b2** measures the proportion of explained variance (1.0 = perfect). "
@@ -1178,6 +1218,7 @@ with tabs[5]:
         "PDPs show the **marginal effect** of a single feature on the predicted CO\u2082 value \u2014 "
         "all other features are held at their mean (ceteris paribus). "
         "This reveals the isolated, non-linear influence of each individual feature."
+        "So lässt sich der isolierte, nichtlineare Einfluss jedes Merkmals ablesen."
     )
     # Fix: GearCount must be float for PDP
     X_train_pdp = X_train.copy()
@@ -1203,8 +1244,88 @@ with tabs[5]:
             "Automatic gearbox shows marginally higher CO₂ than manual — after controlling for all other features."
         )
     except Exception as e:
-        st.warning(f"PDP not available: {e}")
+        st.warning(f"PDP nicht verfügbar: {e}")
 
+
+
+    # ── 5. What-If Simulator ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("5️⃣ What-If Simulator — Live Model Interaction")
+    st.markdown(
+        "Adjust individual vehicle features using the sliders below. "
+        "The model recalculates the predicted CO₂ in **real time**, showing "
+        "the isolated effect of each parameter. All other features are held constant "
+        "at the **dataset median / mode** (the typical vehicle in the dataset)."
+    )
+    base_mass  = float(df_unique["Empty Mass Euro Avg (kg)"].median())
+    base_power = float(df_unique["Maximum Power (kW)"].median())
+    base_gears = float(df_unique["GearCount"].median()) if "GearCount" in df_unique.columns else 6.0
+    base_fuel  = str(df_unique["Fuel"].mode().iloc[0]) if "Fuel" in df_unique.columns else "GO"
+    base_body  = str(df_unique["Body"].mode().iloc[0]) if "Body" in df_unique.columns else "BERLINE"
+    base_gtype = str(df_unique["GearType"].mode().iloc[0]) if "GearType" in df_unique.columns else "Manual"
+    base_row = {}
+    for f in feature_cols:
+        if f == "Empty Mass Euro Avg (kg)": base_row[f] = base_mass
+        elif f == "Maximum Power (kW)":     base_row[f] = base_power
+        elif f == "GearCount":              base_row[f] = base_gears
+        elif f == "Fuel":                   base_row[f] = base_fuel
+        elif f == "Body":                   base_row[f] = base_body
+        elif f == "GearType":               base_row[f] = base_gtype
+        else:                               base_row[f] = 0
+    base_pred = float(fitted[best_model_name].predict(pd.DataFrame([base_row]))[0])
+    st.caption(f"Base: {base_mass:.0f} kg · {base_power:.0f} kW ({base_power*1.36:.0f} HP) · {base_fuel} · {base_body} · {base_gtype} · {base_gears:.0f} gears → **Base CO₂: {base_pred:.1f} g/km**")
+    st.markdown("---")
+    col_sliders, col_result = st.columns([2, 1])
+    with col_sliders:
+        sim_mass  = st.slider("Empty Mass (kg)",       800, 3200, int(base_mass),  50)
+        sim_power = st.slider("Maximum Power (kW)",     40,  560, int(base_power),  5)
+        sim_gears = st.slider("Number of Gears",         4,    8, int(base_gears),  1) if "GearCount" in feature_cols else base_gears
+        col_a, col_b, col_c = st.columns(3)
+        with col_a: sim_fuel  = st.selectbox("Fuel",         ["GO","ES"], index=0 if base_fuel=="GO" else 1)
+        with col_b: sim_gtype = st.selectbox("Gearbox Type", ["Manual","Automatic","CVT","DCT"], index=["Manual","Automatic","CVT","DCT"].index(base_gtype) if base_gtype in ["Manual","Automatic","CVT","DCT"] else 0)
+        with col_c:
+            body_opts = sorted(df_unique["Body"].dropna().unique().tolist()) if "Body" in df_unique.columns else ["BERLINE"]
+            sim_body = st.selectbox("Body Style", body_opts, index=body_opts.index(base_body) if base_body in body_opts else 0)
+    sim_row = {}
+    for f in feature_cols:
+        if f == "Empty Mass Euro Avg (kg)": sim_row[f] = float(sim_mass)
+        elif f == "Maximum Power (kW)":     sim_row[f] = float(sim_power)
+        elif f == "GearCount":              sim_row[f] = float(sim_gears)
+        elif f == "Fuel":                   sim_row[f] = sim_fuel
+        elif f == "Body":                   sim_row[f] = sim_body
+        elif f == "GearType":               sim_row[f] = sim_gtype
+        else:                               sim_row[f] = 0
+    sim_pred   = float(fitted[best_model_name].predict(pd.DataFrame([sim_row]))[0])
+    delta_co2  = sim_pred - base_pred
+    delta_col  = "#DC2626" if delta_co2 > 0 else "#059669" if delta_co2 < 0 else "#6B7280"
+    box_color  = "#059669" if sim_pred <= 120 else "#D97706" if sim_pred <= 160 else "#DC2626"
+    euro_sim   = ("A (≤100)" if sim_pred<=100 else "B (101–120)" if sim_pred<=120 else "C (121–140)" if sim_pred<=140 else "D (141–160)" if sim_pred<=160 else "E (161–200)" if sim_pred<=200 else "F/G (>200)")
+    with col_result:
+        st.markdown("#### Predicted CO₂")
+        st.markdown(f"<div style='background:{box_color}11;border-left:4px solid {box_color};padding:16px;border-radius:4px;text-align:center;'><div style='font-size:34px;font-weight:700;color:{box_color}'>{sim_pred:.1f} g/km</div><div style='font-size:13px;color:#6B7280'>{euro_sim}</div><div style='font-size:16px;color:{delta_col};margin-top:8px;font-weight:600'>{'▲' if delta_co2>0 else '▼' if delta_co2<0 else '='} {delta_co2:+.1f} g/km vs base</div></div>", unsafe_allow_html=True)
+        st.markdown(" ")
+        st.metric("Mass change",  f"{sim_mass-base_mass:+.0f} kg")
+        st.metric("Power change", f"{sim_power-base_power:+.0f} kW")
+        st.metric("CO₂ change",   f"{delta_co2:+.1f} g/km", delta_color="inverse")
+    st.markdown("---")
+    st.markdown("##### Sensitivity: CO₂ as you vary Mass and Power (ceteris paribus)")
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4))
+    mass_range = np.arange(800, 3300, 100)
+    mass_preds = [float(fitted[best_model_name].predict(pd.DataFrame([{**sim_row, "Empty Mass Euro Avg (kg)": float(m)}]))[0]) for m in mass_range]
+    axes[0].plot(mass_range, mass_preds, color=BLUE, lw=2)
+    axes[0].axvline(sim_mass,  color=ACCENT,  lw=1.5, ls="--", label=f"Current: {sim_mass} kg")
+    axes[0].axvline(base_mass, color=NEUTRAL, lw=1,   ls=":",  label=f"Base: {base_mass:.0f} kg")
+    axes[0].set_xlabel("Empty Mass (kg)"); axes[0].set_ylabel("Predicted CO₂ (g/km)")
+    axes[0].set_title("CO₂ vs. Mass"); axes[0].legend(fontsize=8)
+    power_range = np.arange(40, 570, 10)
+    power_preds = [float(fitted[best_model_name].predict(pd.DataFrame([{**sim_row, "Maximum Power (kW)": float(p)}]))[0]) for p in power_range]
+    axes[1].plot(power_range, power_preds, color="#D97706", lw=2)
+    axes[1].axvline(sim_power,  color=ACCENT,  lw=1.5, ls="--", label=f"Current: {sim_power} kW")
+    axes[1].axvline(base_power, color=NEUTRAL, lw=1,   ls=":",  label=f"Base: {base_power:.0f} kW")
+    axes[1].set_xlabel("Maximum Power (kW)"); axes[1].set_ylabel("Predicted CO₂ (g/km)")
+    axes[1].set_title("CO₂ vs. Power"); axes[1].legend(fontsize=8)
+    plt.tight_layout(); st.pyplot(fig); plt.close()
+    st.caption(f"Model: Random Forest · Feature set: {best_fs} · Test MAE ≈ {results_df[results_df['Model']=='Random Forest']['Test_MAE'].iloc[0]:.1f} g/km. Ceteris paribus: all other features held constant.")
 
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
@@ -1340,7 +1461,6 @@ with tabs[6]:
 
         # Fleet-wide median as reference
         fleet_median = df_unique["CO2 (g/km)"].median()
-        # Lower CO2 is better — pct_better = share of fleet with MORE CO2 than segment
         pct_better   = (df_unique["CO2 (g/km)"] > co2_median).mean() * 100
         delta_fleet  = co2_median - fleet_median
         jahres_co2   = co2_median * 15000 / 1000
@@ -1402,7 +1522,7 @@ with tabs[6]:
                    label=f"Segment median: {co2_median:.0f} g/km")
         ax.axvline(fleet_median, color="gray", lw=1.5, linestyle=":",
                    label=f"Fleet median: {fleet_median:.0f} g/km")
-        ax.set_xlabel("CO₂ (g/km)"); ax.set_ylabel("Frequency")
+        ax.set_xlabel("CO₂ (g/km)"); ax.set_ylabel("Häufigkeit")
         ax.set_title("Your Segment vs. Full Fleet")
         ax.legend(fontsize=9)
         for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
@@ -1421,7 +1541,7 @@ with tabs[6]:
             .sort_values("CO2_Median")
             .reset_index()
         )
-        # Only brands with ≥2 models (unless too few results)
+        # Nur Marken mit ≥2 Modellen (außer wenn zu wenige)
         if (brand_summary["Modelle"] >= 2).sum() >= 3:
             brand_summary = brand_summary[brand_summary["Modelle"] >= 2]
 
@@ -1441,7 +1561,7 @@ with tabs[6]:
         for bar, val, n in zip(bars, plot_b["CO2_Median"], plot_b["Modelle"]):
             ax.text(bar.get_width() + 0.5,
                     bar.get_y() + bar.get_height() / 2,
-                    f"{val:.0f} g/km  ({int(n)} models)",
+                    f"{val:.0f} g/km  ({int(n)} Modelle)",
                     va="center", fontsize=9)
 
         ax.axvline(co2_median, color="black", lw=1.5, linestyle="--",
