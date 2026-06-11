@@ -1609,7 +1609,7 @@ with tabs[6]:
                 f"Min {rb['CO2_Min']:.0f} · Max {rb['CO2_Max']:.0f} g/km<br>"
                 f"{int(rb['Modelle'])} models in segment<br>"
                 f"<strong>{saving_str}</strong>"
-                f"</div></div>",
+                f"</div></div>", 
                 unsafe_allow_html=True
             )
 
