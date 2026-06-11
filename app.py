@@ -384,13 +384,13 @@ with st.sidebar:
 
 # ── Tabs ─────────────────────────────────────────────────────────────────────
 tabs = st.tabs([
-    "📋 Preprocessing",
-    "📊 EDA",
-    "🔗 Correlation Analysis",
-    "📉 Deduplication",
-    "🔵 Clustering",
-    "🤖 Prediction",
-    "🎯 CO₂ Calculator",
+    "Preprocessing",
+    "EDA",
+    "Correlation Analysis",
+    "Deduplication",
+    "Clustering",
+    "Prediction",
+    "CO₂ Calculator",
 ])
 
 # ═══════════════════════ TAB 0 – PREPROCESSING ═══════════════════════════════
@@ -405,7 +405,7 @@ with tabs[0]:
     """)
 
     # ── 1. Dataset at a glance ────────────────────────────────────────────────
-    st.subheader("1️⃣ Dataset at a Glance")
+    st.subheader("1️ Dataset at a Glance")
     n_esgo = len(df_combus)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Rows",           f"{len(df):,}")
@@ -421,7 +421,7 @@ with tabs[0]:
 
     # ── 2. Preprocessing pipeline ────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("2️⃣ Preprocessing Pipeline")
+    st.subheader("2️ Preprocessing Pipeline")
 
     steps = [
         ("🏷️ Column Renaming",
@@ -461,12 +461,12 @@ with tabs[0]:
 
     # ── 3. Missing values ────────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("3️⃣ Missing Values Analysis")
+    st.subheader("3️ Missing Values Analysis")
     st.markdown(
         "The heatmap shows the **pattern** of missing values (blue = missing) — "
         "if missing values cluster in rows, it suggests systematic gaps "
         "(e.g. all EVs missing emission data). "
-        "The bar chart shows the **count** per column."
+        "The bar chart shows the remaining **count** per column after preprocessing."
     )
 
     missing_values = df.isnull().sum()
@@ -502,7 +502,7 @@ with tabs[0]:
 
     # ── 4. Column overview ───────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("4️⃣ Column Overview")
+    st.subheader("4️ Column Overview")
     col_info = []
     for col in df.columns:
         dtype  = str(df[col].dtype)
@@ -522,7 +522,7 @@ with tabs[0]:
 
     # ── 5. Dataset Summary ───────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("5️⃣ Descriptive Statistics")
+    st.subheader("5️ Descriptive Statistics")
     st.markdown("Statistical summary of all numeric columns after preprocessing.")
     desc = df.describe(include="all").T
     num_cols_desc = desc.select_dtypes(include="number").columns.tolist()
@@ -531,14 +531,14 @@ with tabs[0]:
 
     # ── 6. First rows ────────────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("6️⃣ Sample Data (First 10 Rows)")
+    st.subheader("6️ Sample Data (First 10 Rows)")
     st.markdown("Preprocessed dataset after all transformations — ready for analysis.")
     st.dataframe(df.head(10), width="stretch")
 
 
 # ═══════════════════════ TAB 1 – EDA ═════════════════════════════════════════
 with tabs[1]:
-    st.header("📊 Fleet-wide Distribution and Frequency Analysis")
+    st.header("Fleet-wide Distribution and Frequency Analysis")
 
     # CO2 analysis before deduplication (2x2 wie im Notebook)
     st.subheader("CO₂ Emissions Analysis – Target Variable (before Deduplication)")
@@ -679,7 +679,7 @@ with tabs[1]:
 
 # ═══════════════════════ TAB 2 – KORRELATIONEN ═══════════════════════════════
 with tabs[2]:
-    st.header("🔗 Correlation & Statistical Analysis")
+    st.header("Correlation & Statistical Analysis")
 
     # Pearson + Spearman heatmap (wie im Notebook)
     st.subheader("Pearson vs. Spearman Correlation Heatmap")
@@ -794,7 +794,7 @@ with tabs[2]:
 
 # ═══════════════════════ TAB 3 – DEDUPLICATION ═══════════════════════════════
 with tabs[3]:
-    st.header("📉 Data Deduplication – Unique Mechanical Configurations")
+    st.header("Data Deduplication – Unique Mechanical Configurations")
 
     st.markdown("""
     ### Why deduplicate?
@@ -976,7 +976,7 @@ with tabs[3]:
 
 # ═══════════════════════ TAB 4 – CLUSTERING ══════════════════════════════════
 with tabs[4]:
-    st.header("🔵 K-Prototypes Clustering")
+    st.header("K-Prototypes Clustering")
 
     st.markdown("""
     > **Research Question:** Which natural vehicle segments can be identified based on
@@ -1203,7 +1203,7 @@ with tabs[4]:
 
 # ═══════════════════════ TAB 5 – PREDICTION ══════════════════════════════════
 with tabs[5]:
-    st.header("🤖 Predictive Modeling")
+    st.header("Predictive Modeling")
 
     st.markdown("""
     > **Research Question:** What is the relative contribution of vehicle mass, engine power,
@@ -1225,7 +1225,7 @@ with tabs[5]:
     best_model_name = "Random Forest"
 
     # ── 1. Feature Set Comparison ────────────────────────────────────────────
-    st.subheader("1️⃣ Feature Set Comparison (5-Fold CV, Random Forest)")
+    st.subheader("1️ Feature Set Comparison (5-Fold CV, Random Forest)")
     st.markdown(
         "**Methodology:** Four feature combinations are compared using **5-fold cross-validation** "
         "with a Random Forest. MAE measures the average deviation in g/km "
@@ -1252,7 +1252,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 2. Model Performance ─────────────────────────────────────────────────
-    st.subheader(f"2️⃣ Model Comparison: R² and MAE ({best_fs})")
+    st.subheader(f"2️ Model Comparison: R² and MAE ({best_fs})")
     st.markdown(
         "Five models are evaluated on the same train/test split (80/20). "
         "**R\u00b2** measures the proportion of explained variance (1.0 = perfect). "
@@ -1287,7 +1287,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 3. Feature Importance ────────────────────────────────────────────────
-    st.subheader(f"3️⃣ Feature Importance – Random Forest ({best_fs})")
+    st.subheader(f"3️ Feature Importance – Random Forest ({best_fs})")
     st.markdown(
         "Feature Importance (Mean Decrease Impurity) measures how strongly each feature "
         "contributes to reducing the prediction error. "
@@ -1313,7 +1313,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 4. Partial Dependence Plots ──────────────────────────────────────────
-    st.subheader("4️⃣ Partial Dependence Plots – Random Forest")
+    st.subheader("4️ Partial Dependence Plots – Random Forest")
     st.markdown(
         "PDPs show the **marginal effect** of a single feature on the predicted CO\u2082 value \u2014 "
         "all other features are held at their mean (ceteris paribus). "
@@ -1353,7 +1353,7 @@ with tabs[5]:
 
     # ── 5. What-If Simulator ─────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("5️⃣ What-If Simulator — Live Model Interaction")
+    st.subheader("5️ What-If Simulator — Live Model Interaction")
     st.markdown(
         "Adjust individual vehicle features using the sliders below. "
         "The model recalculates the predicted CO₂ in **real time**, showing "
@@ -1540,7 +1540,7 @@ with tabs[5]:
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
 with tabs[6]:
-    st.header("🎯 CO₂ Calculator & Brand Comparison")
+    st.header("CO₂ Calculator & Brand Comparison")
     st.markdown(
         "Choose your vehicle by **everyday criteria** — "
         "the app shows the **real CO₂ median** from comparable vehicles "
