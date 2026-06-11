@@ -681,24 +681,28 @@ with tabs[1]:
 with tabs[2]:
     st.header("Correlation & Statistical Analysis")
 
-    # Pearson + Spearman heatmap (wie im Notebook)
+    # ── Pearson + Spearman heatmap (deduplicated) ─────────────────────────────
     st.subheader("Pearson vs. Spearman Correlation Heatmap")
     st.markdown(
         "**Methodology:** Two correlation measures are computed and compared in parallel. "
         "**Pearson** measures linear relationships (assumes normality). "
         "**Spearman** measures monotonic relationships (rank-based, robust to outliers). "
         "Comparing both reveals where non-linear relationships exist \u2014 "
-        "indicated by large differences between Pearson and Spearman coefficients."
+        "indicated by large differences between Pearson and Spearman coefficients. "
+        "Both heatmaps are based on the **deduplicated dataset** (n=5,700 unique "
+        "mechanical configurations) to avoid statistical bias from duplicate entries."
     )
-    df_numeric = df.select_dtypes(include=np.number).copy()
+
+    # ── KEY CHANGE: use df_unique instead of df ───────────────────────────────
+    df_numeric = df_unique.select_dtypes(include=np.number).copy()
     pearson_corr  = df_numeric.corr(method='pearson')
     spearman_corr = df_numeric.corr(method='spearman')
 
     fig, ax = plt.subplots(1, 2, figsize=(20, 8))
     sns.heatmap(pearson_corr, annot=True, fmt='.2f', cmap='coolwarm', ax=ax[0])
-    ax[0].set_title('Pearson Correlation Heatmap (Numeric-Only)')
+    ax[0].set_title('Pearson Correlation Heatmap (Deduplicated, n=5,700)')
     sns.heatmap(spearman_corr, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax[1])
-    ax[1].set_title('Spearman Correlation Heatmap (Numeric-Only)')
+    ax[1].set_title('Spearman Correlation Heatmap (Deduplicated, n=5,700)')
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     st.caption(
@@ -709,7 +713,8 @@ with tabs[2]:
         "Maximum power has moderate Pearson (r=0.36) but weaker Spearman (r=0.18) "
         "\u2014 indicates a non-linear relationship. "
         "HC and NOX correlate negatively with CO\u2082 (r\u2248-0.17) \u2014 diesel vehicles emit "
-        "more NOX at lower CO\u2082 than petrol vehicles."
+        "more NOX at lower CO\u2082 than petrol vehicles. "
+        "Based on deduplicated data (n=5,700) — duplicate configurations excluded to prevent bias."
     )
 
     st.markdown("---")
@@ -838,11 +843,6 @@ with tabs[3]:
     st.markdown("---")
 
     # ── Key metrics ──────────────────────────────────────────────────────────
-    # total_obs      : all records in the raw dataset (all fuel types)
-    # filtered_obs   : after keeping only petrol (ES) + diesel (GO)
-    # unique_designs : after groupby on UNIQUE_COLS — the true analytical unit
-    # redundancy_pct : share of filtered records that were duplicates
-    # top_clone      : largest Clone_Count — most repeated configuration
     total_obs          = len(df)
     filtered_obs       = len(df_combus)
     unique_designs     = len(df_unique)
@@ -858,8 +858,6 @@ with tabs[3]:
     c4.metric("Redundancy Rate",  f"{redundancy_pct:.1f}%")
 
     # ── Bar chart: Engineering Fleet Diversity ───────────────────────────────
-    # Visualises the reduction from raw records → unique mechanical designs.
-    # The annotation box shows redundancy %, unique count and total count.
     fig, ax = plt.subplots(figsize=(10, 6))
     categories = ['Total Records in Data', 'Unique Mechanical Designs']
     values = [total_obs, unique_designs]
@@ -877,10 +875,6 @@ with tabs[3]:
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     # ── CO₂ analysis after deduplication ────────────────────────────────────
-    # Re-plots the CO₂ distribution on df_unique instead of df_combus.
-    # Removing duplicates shifts the distribution: the mean drops because
-    # Mercedes-Benz Minibus clones (high CO₂, high Clone_Count) are collapsed
-    # into single rows — revealing the true spread across vehicle types.
     st.subheader("CO₂ Analysis after Deduplication")
     fig, axes = plt.subplots(2, 2, figsize=(16, 8))
     fig.suptitle('CO2 Emissions Analysis (Deduplicated Data)', fontsize=16, fontweight='bold')
@@ -909,10 +903,6 @@ with tabs[3]:
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     # ── Outlier analysis (IQR method) ────────────────────────────────────────
-    # IQR (Interquartile Range) method: outliers are values below Q1 - 1.5×IQR
-    # or above Q3 + 1.5×IQR.  Applied separately to CO₂, Power and Mass.
-    # Outliers are NOT removed — they are real vehicles (e.g. Lexus LFA, 379 g/km).
-    # They are documented here for transparency and to inform model interpretation.
     st.subheader("Outlier Analysis (IQR Method)")
     st.markdown("""
     The IQR method flags values outside **Q1 − 1.5 × IQR** and **Q3 + 1.5 × IQR**.
@@ -1548,7 +1538,6 @@ with tabs[6]:
     )
 
     # ── Mappings: consumer language → dataset values ─────────────────────────
-    # ── Mappings: AutoScout24-style Body + Fuel + PS ────────────────────────
     BODY_MAP = {
         "Saloon":          "BERLINE",
         "Estate":          "BREAK",
@@ -1671,16 +1660,19 @@ with tabs[6]:
 
         # Fleet-wide median as reference
         fleet_median = df_unique["CO2 (g/km)"].median()
-        # "Better than X%" = X% of fleet has MORE CO2 than your segment
         pct_better   = (df_unique["CO2 (g/km)"] > co2_median).mean() * 100
         delta_fleet  = co2_median - fleet_median
         jahres_co2   = co2_median * 15000 / 1000
 
-        euro  = ("A (≤100 g/km)" if co2_median <= 100 else
-                 "B (101–120)"   if co2_median <= 120 else
-                 "C (121–140)"   if co2_median <= 140 else
-                 "D (141–160)"   if co2_median <= 160 else
-                 "E (161–200)"   if co2_median <= 200 else "F/G (>200)")
+        euro  = (
+    "A (≤100)" if sim_pred <= 100 else
+    "B (101–120)" if sim_pred <= 120 else
+    "C (121–140)" if sim_pred <= 140 else
+    "D (141–160)" if sim_pred <= 160 else
+    "E (161–200)" if sim_pred <= 200 else
+    "F (201–250)" if sim_pred <= 250 else
+    "G (>250)"
+)
         color = "green" if co2_median <= 120 else "orange" if co2_median <= 160 else "red"
 
         st.markdown("---")
