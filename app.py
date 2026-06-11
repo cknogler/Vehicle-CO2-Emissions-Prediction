@@ -1,23 +1,17 @@
 """
-search_app.py – Vehicle CO₂ Search Portal
-ADEME Car Labelling Dataset — multi-criteria search, comparison, CO₂ label.
-Self-contained, no external imports.
+search_app.py  –  CO₂ Vehicle Search
+Replicates the ADEME Car Labelling portal (carlabelling.ademe.fr).
+Self-contained – no external module imports.
 """
 from __future__ import annotations
-import io
-import urllib.request
-import warnings
-from dataclasses import dataclass
-
+import io, urllib.request, warnings
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 warnings.filterwarnings("ignore")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# DATA PIPELINE
-# ══════════════════════════════════════════════════════════════════════════════
+# ── Constants ─────────────────────────────────────────────────────────────────
 CSV_URL = (
     "https://raw.githubusercontent.com/cknogler/"
     "Vehicle-CO2-Emissions-Prediction/main/cl_JUIN_2013-complet3.csv"
@@ -25,600 +19,595 @@ CSV_URL = (
 
 COLUMN_MAPPING = {
     "Marque": "Brand",
-    "Modèle dossier": "Folder Model",
-    "Désignation commerciale": "Commercial Designation",
-    "Carburant": "Fuel",
+    "Modèle dossier": "Model",
+    "Désignation commerciale": "Commercial Name",
+    "Carburant": "_fuel_code",
     "Puissance maximale (kW)": "Max Power (kW)",
-    "Puissance administrative": "Fiscal Power (CV)",
-    "Boîte de vitesse": "Gearbox",
-    "Consommation urbaine (l/100km)": "Urban Conso (l/100km)",
-    "Consommation extra-urbaine (l/100km)": "ExUrban Conso (l/100km)",
-    "Consommation mixte (l/100km)": "Mixed Conso (l/100km)",
-    "CO2 (g/km)": "CO2 (g/km)",
+    "Puissance administrative": "Fiscal Power",
+    "Boîte de vitesse": "_gearbox_raw",
+    "Consommation urbaine (l/100km)": "Urban Conso",
+    "Consommation extra-urbaine (l/100km)": "Extra-Urban Conso",
+    "Consommation mixte (l/100km)": "Conso Min",   # dataset has one value; we use as min
+    "CO2 (g/km)": "CO2",
     "CO type I (g/km)": "CO (g/km)",
     "HC (g/km)": "HC (g/km)",
     "NOX (g/km)": "NOx (g/km)",
     "HC+NOX (g/km)": "HC+NOx (g/km)",
     "Particules (g/km)": "Particles (g/km)",
-    "masse vide euro min (kg)": "Mass Min (kg)",
-    "masse vide euro max (kg)": "Mass Max (kg)",
+    "masse vide euro min (kg)": "_mass_min",
+    "masse vide euro max (kg)": "_mass_max",
     "Carrosserie": "Body",
-    "gamme": "Segment",
-    "Hybride": "Hybrid",
+    "gamme": "Size",
+    "Hybride": "_hybrid",
     "Champ V9": "Euro Norm",
     "Date de mise à jour": "Updated",
 }
 
-FUEL_LABELS = {
-    "ES": "Petrol",   "GO": "Diesel",  "EL": "Electric",
-    "GH": "Hybrid (Diesel)", "EH": "Hybrid (Petrol)",
-    "EE": "Plug-in Hybrid (Petrol)", "GL": "Plug-in Hybrid (Diesel)",
-    "GP": "LPG", "GN": "CNG", "FE": "E85",
+FUEL_MAP = {
+    "ES":"Petrol (ES)", "GO":"Diesel (GO)", "EL":"Electric (EL)",
+    "GH":"Non-plug-in hybrid (GH)", "EH":"Non-plug-in hybrid (EH)",
+    "EE":"Plug-in hybrid (EE)", "GL":"Plug-in hybrid (GL)",
+    "GP":"LPG", "GN":"NGV", "FE":"Superethanol-E85 (FE)",
+}
+FUEL_GROUP = {
+    "Electric (EL)":           ["EL"],
+    "Non-plug-in hybrid":      ["EH","GH"],
+    "Plug-in hybrid":          ["EE","GL"],
+    "Petrol (ES)":             ["ES"],
+    "Diesel (GO)":             ["GO"],
+    "Superethanol-E85 (FE)":   ["FE"],
+    "LPG":                     ["GP"],
+    "NGV":                     ["GN"],
 }
 
-GEAR_LABELS = {
-    "M": "Manual", "A": "Automatic", "V": "CVT", "D": "DCT",
-}
+GEAR_MAP = {"M":"Manual","A":"Automatic","V":"CVT","D":"DCT","N":"Automatic","S":"Manual"}
 
-CO2_CLASSES = {
-    "A": (0,   100),
-    "B": (101, 120),
-    "C": (121, 140),
-    "D": (141, 160),
-    "E": (161, 200),
-    "F": (201, 250),
-    "G": (251, 9999),
-}
+# EU CO₂ label classes (NEDC thresholds – matches 2013 dataset)
+CO2_CLASSES = [
+    ("A", 0,   100, "#1a8c3c"),
+    ("B", 101, 120, "#4db84b"),
+    ("C", 121, 140, "#b2d145"),
+    ("D", 141, 160, "#f9e000"),
+    ("E", 161, 200, "#e07b00"),
+    ("F", 201, 250, "#d03200"),
+    ("G", 251, 9999,"#a00000"),
+]
+CLASS_FG = {"A":"#fff","B":"#fff","C":"#111","D":"#111","E":"#fff","F":"#fff","G":"#fff"}
 
-CLASS_COLOR = {
-    "A": "#1a9641", "B": "#52b747", "C": "#a6d96a",
-    "D": "#ffffbf", "E": "#fdae61", "F": "#f46d43", "G": "#d73027",
-}
-CLASS_TEXT  = {"A":"#fff","B":"#fff","C":"#111","D":"#111","E":"#111","F":"#fff","G":"#fff"}
-
-
-def co2_class(v):
+def _co2_class(v):
     if pd.isna(v): return "?"
-    for cls, (lo, hi) in CO2_CLASSES.items():
-        if lo <= v <= hi:
-            return cls
+    for cls, lo, hi, _ in CO2_CLASSES:
+        if lo <= v <= hi: return cls
     return "G"
 
+def _cls_color(cls):
+    for c, _, _, col in CO2_CLASSES:
+        if c == cls: return col
+    return "#888"
 
+# ── Data loading ───────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def load_data() -> pd.DataFrame:
     with urllib.request.urlopen(CSV_URL) as r:
         raw = r.read()
-
     df = None
-    for enc in ("latin1", "utf-8", "cp1252"):
-        for sep in (";", ","):
+    for enc in ("latin1","utf-8","cp1252"):
+        for sep in (";",","):
             try:
                 tmp = pd.read_csv(io.BytesIO(raw), sep=sep, encoding=enc, low_memory=False)
-                if tmp.shape[1] > 5:
-                    df = tmp; break
-            except Exception:
-                continue
-        if df is not None:
-            break
-    if df is None:
-        raise ValueError("Could not parse CSV.")
+                if tmp.shape[1] > 5: df = tmp; break
+            except: continue
+        if df is not None: break
+    if df is None: raise ValueError("Cannot parse CSV")
 
-    df = df.rename(columns={k: v for k, v in COLUMN_MAPPING.items() if k in df.columns})
+    df = df.rename(columns={k:v for k,v in COLUMN_MAPPING.items() if k in df.columns})
 
     # HC/NOx imputation
-    if all(c in df.columns for c in ("HC (g/km)", "NOx (g/km)", "HC+NOx (g/km)")):
+    if all(c in df.columns for c in ("HC (g/km)","NOx (g/km)","HC+NOx (g/km)")):
         hc  = (df["HC+NOx (g/km)"] - df["NOx (g/km)"]).fillna(df["HC (g/km)"])
         nox = (df["HC+NOx (g/km)"] - df["HC (g/km)"]).fillna(df["NOx (g/km)"])
         df["HC (g/km)"], df["NOx (g/km)"] = hc, nox
         df["HC+NOx (g/km)"] = hc + nox
 
-    # Gearbox fix
-    if "Gearbox" in df.columns:
-        df["Gearbox"] = df["Gearbox"].replace({"N 0":"A 0","N 1":"A 0","S 6":"D 6"})
-        gs = df["Gearbox"].astype(str).str.split(" ", expand=True)
-        df["Gear Type"]  = gs[0].map(GEAR_LABELS).fillna(gs[0])
-        df["Gear Count"] = pd.to_numeric(
-            gs[1] if 1 in gs.columns else pd.Series(dtype=float), errors="coerce"
-        ).astype("Int64")
+    # Gearbox
+    if "_gearbox_raw" in df.columns:
+        df["_gearbox_raw"] = df["_gearbox_raw"].replace({"N 0":"A 0","N 1":"A 0","S 6":"D 6"})
+        gs = df["_gearbox_raw"].astype(str).str.split(" ", expand=True)
+        df["Gearbox"] = gs[0].map(GEAR_MAP).fillna(gs[0])
 
     # EV zeros
-    ev_cols = ["CO2 (g/km)", "Mixed Conso (l/100km)", "Urban Conso (l/100km)",
-               "ExUrban Conso (l/100km)", "HC (g/km)", "NOx (g/km)", "Particles (g/km)"]
-    if "Fuel" in df.columns:
-        mask_ev = df["Fuel"] == "EL"
+    ev_cols = ["CO2","Conso Min","Urban Conso","Extra-Urban Conso",
+               "HC (g/km)","NOx (g/km)","Particles (g/km)","CO (g/km)"]
+    if "_fuel_code" in df.columns:
+        mask_ev = df["_fuel_code"] == "EL"
         for c in ev_cols:
-            if c in df.columns:
-                df.loc[mask_ev, c] = df.loc[mask_ev, c].fillna(0)
+            if c in df.columns: df.loc[mask_ev, c] = df.loc[mask_ev, c].fillna(0)
 
-    # Average mass
-    if "Mass Min (kg)" in df.columns and "Mass Max (kg)" in df.columns:
+    # Mass avg
+    if "_mass_min" in df.columns and "_mass_max" in df.columns:
         df["Mass (kg)"] = (
-            pd.to_numeric(df["Mass Min (kg)"], errors="coerce")
-            + pd.to_numeric(df["Mass Max (kg)"], errors="coerce")
+            pd.to_numeric(df["_mass_min"], errors="coerce") +
+            pd.to_numeric(df["_mass_max"], errors="coerce")
         ) / 2
 
-    # Numeric coercion
-    for c in ("CO2 (g/km)", "Mixed Conso (l/100km)", "Max Power (kW)", "Mass (kg)",
-              "HC (g/km)", "NOx (g/km)", "Particles (g/km)", "CO (g/km)"):
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+    # Numeric
+    for c in ("CO2","Conso Min","Max Power (kW)","Mass (kg)",
+              "HC (g/km)","NOx (g/km)","Particles (g/km)","CO (g/km)"):
+        if c in df.columns: df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # Fuel label
-    if "Fuel" in df.columns:
-        df["Fuel Label"] = df["Fuel"].map(FUEL_LABELS).fillna(df["Fuel"])
-
-    # CO2 class
-    if "CO2 (g/km)" in df.columns:
-        df["CO2 Class"] = df["CO2 (g/km)"].apply(co2_class)
-
-    # HP
-    if "Max Power (kW)" in df.columns:
-        df["Max Power (HP)"] = (df["Max Power (kW)"] * 1.36).round(0).astype("Int64")
+    # Derived
+    if "_fuel_code" in df.columns:
+        df["Energy"] = df["_fuel_code"].map(FUEL_MAP).fillna(df["_fuel_code"])
+    if "CO2" in df.columns:
+        df["CO2 Class"] = df["CO2"].apply(_co2_class)
+        df["Conso Max"] = df["Conso Min"]   # 2013 dataset has single conso value
 
     return df
 
-
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIG & STYLES
+# PAGE CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="CO\u2082 Vehicle Search",
-    page_icon="\u25c8",
+    page_title="CO\u2082 Vehicle Search · ADEME",
+    page_icon="\U0001f697",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
-MINT   = "#00C8A0"
-AMBER  = "#F5A623"
-RED    = "#E84855"
-BG     = "#0D0F18"
-CARD   = "#13161F"
-BORDER = "#1E2130"
-TEXT   = "#EDF0F7"
-MUTED  = "#6B7280"
-SIDEBAR= "#0F1219"
-
-_CSS = """
+# ── ADEME-style CSS (light theme, blue accents) ────────────────────────────────
+st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
-:root {
-  --mint:MINT_V; --amber:AMBER_V; --red:RED_V;
-  --bg:BG_V; --card:CARD_V; --border:BORDER_V;
-  --text:TEXT_V; --muted:MUTED_V; --sidebar:SIDEBAR_V;
-  --font:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+html, body, .stApp { background: #f0f0f0 !important; font-family: 'Open Sans', sans-serif !important; color: #333 !important; }
+.block-container { padding: 0 !important; max-width: 100% !important; }
+header[data-testid="stHeader"] { display: none !important; }
+section[data-testid="stSidebar"] { display: none !important; }
+h1,h2,h3,h4 { font-family: 'Open Sans', sans-serif !important; }
+p, li, label, span { color: #333 !important; }
+/* hide default streamlit metric styling */
+[data-testid="stMetric"] { background: transparent !important; border: none !important; padding: 0 !important; }
+[data-testid="stMetricLabel"] p { font-size: .7rem !important; color: #666 !important; text-transform: uppercase; letter-spacing: .05em; }
+[data-testid="stMetricValue"] { font-size: 1.3rem !important; font-weight: 700 !important; color: #1a5276 !important; font-family: 'Open Sans', sans-serif !important; }
+[data-testid="stDataFrame"] { border-radius: 0 !important; }
+[data-testid="stExpander"] { background: #fff !important; border: 1px solid #ddd !important; border-radius: 4px !important; }
+[data-testid="stExpander"] summary { color: #1a5276 !important; font-weight: 600 !important; }
+.stMultiSelect > div > div, .stSelectbox > div > div {
+  background: #fff !important; border: 1px solid #ccc !important;
+  border-radius: 3px !important; color: #333 !important;
 }
-*, *::before, *::after { box-sizing: border-box; }
-html, body, .stApp { background: var(--bg) !important; color: var(--text) !important; font-family: var(--font) !important; }
-.block-container { padding: 1.5rem 2rem 3rem !important; max-width: 100%; }
-header[data-testid="stHeader"] { background: transparent !important; }
-section[data-testid="stSidebar"] { background: var(--sidebar) !important; border-right: 1px solid var(--border) !important; }
-section[data-testid="stSidebar"] * { color: var(--text) !important; }
-section[data-testid="stSidebar"] .stMarkdown a { color: var(--mint) !important; }
-h1 { font-size: 1.6rem !important; font-weight: 800 !important; letter-spacing: -.04em !important; color: var(--text) !important; margin: 0 !important; }
-h2 { font-size: .7rem !important; font-weight: 600 !important; color: var(--muted) !important; text-transform: uppercase !important; letter-spacing: .12em !important; border: none !important; margin: 0 0 .75rem !important; }
-h3 { font-size: .95rem !important; font-weight: 600 !important; color: var(--text) !important; }
-p, li { color: var(--text) !important; line-height: 1.6 !important; }
-[data-testid="stMetric"] { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; padding: .9rem 1.1rem !important; }
-[data-testid="stMetricLabel"] p { font-size: .62rem !important; font-weight: 600 !important; color: var(--muted) !important; text-transform: uppercase !important; letter-spacing: .1em !important; margin: 0 !important; }
-[data-testid="stMetricValue"] { font-size: 1.4rem !important; font-weight: 700 !important; font-family: var(--mono) !important; color: var(--text) !important; }
-[data-testid="stSelectbox"] label, [data-testid="stMultiSelect"] label,
-[data-testid="stSlider"] label, [data-testid="stRadio"] label,
-[data-testid="stCheckbox"] label { font-size: .68rem !important; font-weight: 600 !important; color: var(--muted) !important; text-transform: uppercase !important; letter-spacing: .09em !important; }
-[data-testid="stSelectbox"] > div > div,
-[data-testid="stMultiSelect"] > div > div { background: var(--card) !important; border-color: var(--border) !important; color: var(--text) !important; border-radius: 7px !important; }
-[data-testid="stRadio"] div[role="radiogroup"] label { color: var(--text) !important; font-size: .85rem !important; text-transform: none !important; letter-spacing: normal !important; }
-[data-testid="stDataFrame"] { border: 1px solid var(--border) !important; border-radius: 10px !important; overflow: hidden !important; }
-[data-testid="stExpander"] { background: var(--card) !important; border: 1px solid var(--border) !important; border-radius: 10px !important; }
-[data-testid="stExpander"] summary { font-weight: 500 !important; font-size: .85rem !important; color: var(--text) !important; }
-.stButton > button { background: var(--mint) !important; color: #0D0F18 !important; border: none !important; border-radius: 7px !important; font-weight: 700 !important; font-size: .82rem !important; letter-spacing: .04em !important; padding: .5rem 1.2rem !important; transition: opacity .15s !important; }
-.stButton > button:hover { opacity: .85 !important; }
-hr { border: none !important; border-top: 1px solid var(--border) !important; margin: 1.25rem 0 !important; }
-[data-testid="stCaptionContainer"] p { color: var(--muted) !important; font-size: .72rem !important; }
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+[data-testid="stMultiSelect"] label, [data-testid="stSelectbox"] label,
+[data-testid="stSlider"] label, [data-testid="stCheckbox"] label {
+  color: #1a5276 !important; font-weight: 700 !important;
+  font-size: .82rem !important; text-transform: none !important; letter-spacing: 0 !important;
+}
+[data-testid="stSlider"] > div > div > div > div { background: #1a5276 !important; }
+.stButton > button {
+  background: #1a5276 !important; color: #fff !important;
+  border: none !important; border-radius: 3px !important;
+  font-weight: 700 !important; font-size: .82rem !important;
+  padding: .45rem 1.1rem !important; letter-spacing: .04em !important;
+}
+.stButton > button:hover { background: #154360 !important; }
+hr { border: none !important; border-top: 1px solid #ddd !important; margin: .75rem 0 !important; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
 </style>
-"""
-_CSS = (_CSS
-    .replace("MINT_V",   MINT)
-    .replace("AMBER_V",  AMBER)
-    .replace("RED_V",    RED)
-    .replace("BG_V",     BG)
-    .replace("CARD_V",   CARD)
-    .replace("BORDER_V", BORDER)
-    .replace("TEXT_V",   TEXT)
-    .replace("MUTED_V",  MUTED)
-    .replace("SIDEBAR_V",SIDEBAR)
-)
-st.markdown(_CSS, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════════════════════════════════════════
-# LOAD DATA
-# ══════════════════════════════════════════════════════════════════════════════
-with st.spinner("Loading ADEME dataset \u2026"):
+# ── Load data ──────────────────────────────────────────────────────────────────
+with st.spinner("Loading ADEME dataset\u2026"):
     df = load_data()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SIDEBAR — FILTERS
+# TOP BAR  (mimics ADEME header)
 # ══════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown(
-        "<div style='padding:.25rem 0 1rem'>"
-        "<div style='font-size:1.2rem;font-weight:800;letter-spacing:-.03em'>CO\u2082 Search</div>"
-        "<div style='font-size:.65rem;font-weight:600;color:{muted};text-transform:uppercase;letter-spacing:.1em'>ADEME \u00b7 France \u00b7 2013</div>"
-        "</div>".format(muted=MUTED),
-        unsafe_allow_html=True,
-    )
-    st.markdown("---")
+st.markdown("""
+<div style='background:#fff;border-bottom:3px solid #c0392b;padding:.6rem 2rem;
+            display:flex;align-items:center;gap:1.5rem'>
+  <div>
+    <span style='font-size:1.25rem;font-weight:700;color:#c0392b;letter-spacing:-.02em'>Car</span>
+    <span style='font-size:1.25rem;font-weight:700;color:#1a5276'> Labelling</span>
+    <div style='font-size:.6rem;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-top:-.1rem'>
+      V&eacute;hicules particuliers &mdash; ADEME Dataset 2013
+    </div>
+  </div>
+  <div style='height:2rem;width:1px;background:#ddd'></div>
+  <nav style='display:flex;gap:2rem;font-size:.78rem;font-weight:600;color:#555'>
+    <span style='color:#1a5276;border-bottom:2px solid #1a5276;padding-bottom:.1rem'>Search</span>
+  </nav>
+</div>
+""", unsafe_allow_html=True)
 
-    # Brand
-    brands = sorted(df["Brand"].dropna().unique())
-    sel_brand = st.multiselect("Brand", brands, placeholder="All brands")
+# ══════════════════════════════════════════════════════════════════════════════
+# SEARCH PANEL  (white card, two columns like ADEME)
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<div style='background:#fff;margin:1rem 2rem;padding:1.25rem 1.5rem;
+            border:1px solid #ddd;border-radius:4px'>
+  <div style='display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem'>
+    <div style='background:#1a5276;border-radius:3px;width:2.2rem;height:2.2rem;
+                display:flex;align-items:center;justify-content:center;
+                font-size:1.1rem'>&#128269;</div>
+    <span style='font-size:.95rem;font-weight:700;color:#1a5276;text-transform:uppercase;
+                 letter-spacing:.06em'>Multi-Criteria Search</span>
+  </div>
+""", unsafe_allow_html=True)
 
-    # Model — filtered by brand selection
-    if sel_brand:
-        models_pool = df[df["Brand"].isin(sel_brand)]["Folder Model"].dropna().unique()
-    else:
-        models_pool = df["Folder Model"].dropna().unique()
-    models = sorted(models_pool)
-    sel_model = st.multiselect("Model", models, placeholder="All models")
+with st.container():
+    col_left, col_right = st.columns([1, 1.4], gap="large")
 
-    st.markdown("---")
+    # ── LEFT: Brand / Model / Body / Size ─────────────────────────────────────
+    with col_left:
+        brands_all = sorted(df["Brand"].dropna().unique())
+        sel_brand  = st.selectbox("Brand", ["Choose\u2026"] + brands_all, index=0)
 
-    # Body / category
-    bodies = sorted(df["Body"].dropna().unique())
-    sel_body = st.multiselect("Body Style", bodies, placeholder="All")
+        if sel_brand != "Choose\u2026":
+            models_pool = sorted(df[df["Brand"] == sel_brand]["Model"].dropna().unique())
+        else:
+            models_pool = sorted(df["Model"].dropna().unique())
+        sel_model = st.selectbox("Model", ["Choose\u2026"] + models_pool, index=0)
 
-    # Segment / range
-    if "Segment" in df.columns:
-        segments = sorted(df["Segment"].dropna().unique())
-        sel_seg = st.multiselect("Segment", segments, placeholder="All")
-    else:
-        sel_seg = []
+        bodies_all = sorted(df["Body"].dropna().unique())
+        sel_body   = st.selectbox("Body", ["Choose\u2026"] + bodies_all, index=0)
 
-    st.markdown("---")
+        if "Size" in df.columns:
+            sizes_all = sorted(df["Size"].dropna().unique())
+            sel_size  = st.selectbox("Size", ["Choose\u2026"] + sizes_all, index=0)
+        else:
+            sel_size = "Choose\u2026"
 
-    # Fuel
-    fuel_opts = sorted(df["Fuel Label"].dropna().unique()) if "Fuel Label" in df.columns else []
-    sel_fuel = st.multiselect("Fuel / Energy", fuel_opts, placeholder="All")
+    # ── RIGHT: Energy checkboxes + Gearbox + Sliders ──────────────────────────
+    with col_right:
+        st.markdown(
+            "<div style='font-weight:700;color:#1a5276;font-size:.82rem;margin-bottom:.4rem'>Energy</div>",
+            unsafe_allow_html=True,
+        )
+        ec1, ec2, ec3 = st.columns(3)
+        fuel_sel = {}
+        energy_groups = list(FUEL_GROUP.keys())
+        for i, grp in enumerate(energy_groups):
+            col_ui = [ec1, ec2, ec3][i % 3]
+            fuel_sel[grp] = col_ui.checkbox(grp, value=False)
 
-    # Gearbox
-    if "Gear Type" in df.columns:
-        gear_opts = sorted(df["Gear Type"].dropna().unique())
-        sel_gear = st.multiselect("Gearbox", gear_opts, placeholder="All")
-    else:
-        sel_gear = []
+        st.markdown("<div style='height:.4rem'></div>", unsafe_allow_html=True)
 
-    st.markdown("---")
+        gc1, gc2 = st.columns(2)
+        with gc1:
+            if "Gearbox" in df.columns:
+                gear_opts = sorted(df["Gearbox"].dropna().unique())
+                sel_gear  = st.selectbox("Gearbox", ["Choose\u2026"] + gear_opts, index=0)
+            else:
+                sel_gear = "Choose\u2026"
 
-    # CO2 class
-    sel_class = st.multiselect(
-        "CO\u2082 Class",
-        options=["A","B","C","D","E","F","G"],
-        placeholder="All classes",
-    )
+        with gc2:
+            conso_max_all = float(df["Conso Min"].dropna().max()) if "Conso Min" in df.columns else 30.0
+            conso_until = st.number_input(
+                "Max combined consumption (l/100 km)", min_value=0.0,
+                max_value=conso_max_all, value=conso_max_all, step=0.5, format="%.1f",
+            )
 
-    # CO2 max slider
-    co2_max_val = int(df["CO2 (g/km)"].dropna().max()) if "CO2 (g/km)" in df.columns else 600
-    co2_range = st.slider(
-        "CO\u2082 Range (g/km)",
-        0, co2_max_val, (0, co2_max_val), step=5,
-    )
+        # CO2 class slider (A=0 … G=6)
+        CLASS_LETTERS = ["A","B","C","D","E","F","G"]
+        co2_cls_range = st.select_slider(
+            "Energy Class / CO\u2082",
+            options=CLASS_LETTERS,
+            value=("A","G"),
+        )
 
-    st.markdown("---")
-
-    # Power
-    pw_max = int(df["Max Power (kW)"].dropna().max()) if "Max Power (kW)" in df.columns else 600
-    pw_range = st.slider(
-        "Max Power (kW)",
-        0, pw_max, (0, pw_max), step=5,
-    )
-
-    # Mass
-    if "Mass (kg)" in df.columns:
-        mass_max = int(df["Mass (kg)"].dropna().max())
-        mass_range = st.slider("Kerb Mass (kg)", 0, mass_max, (0, mass_max), step=50)
-    else:
-        mass_range = None
-
-    st.markdown("---")
-    st.caption("{:,} vehicles in dataset".format(len(df)))
+# close the white card div
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # APPLY FILTERS
 # ══════════════════════════════════════════════════════════════════════════════
 mask = pd.Series(True, index=df.index)
 
-if sel_brand:
-    mask &= df["Brand"].isin(sel_brand)
-if sel_model:
-    mask &= df["Folder Model"].isin(sel_model)
-if sel_body:
-    mask &= df["Body"].isin(sel_body)
-if sel_seg and "Segment" in df.columns:
-    mask &= df["Segment"].isin(sel_seg)
-if sel_fuel and "Fuel Label" in df.columns:
-    mask &= df["Fuel Label"].isin(sel_fuel)
-if sel_gear and "Gear Type" in df.columns:
-    mask &= df["Gear Type"].isin(sel_gear)
-if sel_class and "CO2 Class" in df.columns:
-    mask &= df["CO2 Class"].isin(sel_class)
-if "CO2 (g/km)" in df.columns:
-    mask &= df["CO2 (g/km)"].between(co2_range[0], co2_range[1], inclusive="both") | df["CO2 (g/km)"].isna()
-if "Max Power (kW)" in df.columns:
-    mask &= df["Max Power (kW)"].between(pw_range[0], pw_range[1], inclusive="both") | df["Max Power (kW)"].isna()
-if mass_range is not None and "Mass (kg)" in df.columns:
-    mask &= df["Mass (kg)"].between(mass_range[0], mass_range[1], inclusive="both") | df["Mass (kg)"].isna()
+if sel_brand != "Choose\u2026":
+    mask &= df["Brand"] == sel_brand
+if sel_model != "Choose\u2026":
+    mask &= df["Model"] == sel_model
+if sel_body != "Choose\u2026":
+    mask &= df["Body"] == sel_body
+if sel_size != "Choose\u2026" and "Size" in df.columns:
+    mask &= df["Size"] == sel_size
+if sel_gear != "Choose\u2026" and "Gearbox" in df.columns:
+    mask &= df["Gearbox"] == sel_gear
+
+# Fuel checkboxes — if none ticked, show all
+active_fuels = [code for grp, ticked in fuel_sel.items()
+                if ticked for code in FUEL_GROUP[grp]]
+if active_fuels and "_fuel_code" in df.columns:
+    mask &= df["_fuel_code"].isin(active_fuels)
+
+# Consumption filter
+if "Conso Min" in df.columns:
+    mask &= (df["Conso Min"] <= conso_until) | df["Conso Min"].isna()
+
+# CO2 class filter
+cls_lo_idx = CLASS_LETTERS.index(co2_cls_range[0])
+cls_hi_idx = CLASS_LETTERS.index(co2_cls_range[1])
+sel_classes = CLASS_LETTERS[cls_lo_idx : cls_hi_idx + 1]
+if "CO2 Class" in df.columns:
+    mask &= df["CO2 Class"].isin(sel_classes) | (df["CO2 Class"] == "?")
 
 results = df[mask].copy()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# HEADER
+# RESULTS HEADER BAR  (matches ADEME "436 new vehicles" strip)
 # ══════════════════════════════════════════════════════════════════════════════
+n_res = len(results)
 st.markdown(
-    "<div style='display:flex;align-items:baseline;gap:1rem;margin-bottom:.2rem'>"
-    "<span style='font-size:1.6rem;font-weight:800;letter-spacing:-.04em'>CO\u2082 Vehicle Search</span>"
-    "<span style='font-size:.68rem;font-weight:600;color:{muted};text-transform:uppercase;letter-spacing:.12em'>"
-    "ADEME Car Labelling \u00b7 France \u00b7 2013</span>"
-    "</div>".format(muted=MUTED),
+    "<div style='background:#fff;margin:0 2rem;padding:.8rem 1.25rem;"
+    "border:1px solid #ddd;border-top:none;"
+    "display:flex;align-items:center;gap:1.5rem'>"
+    "<div style='display:flex;align-items:center;gap:.75rem'>"
+    "<span style='font-size:1.6rem'>&#128663;</span>"
+    "<div><div style='font-size:1.3rem;font-weight:700;color:#1a5276'>"
+    "{n:,} vehicle{s}</div>"
+    "<div style='font-size:.75rem;color:#888'>match your search</div></div>"
+    "</div>"
+    "</div>".format(n=n_res, s="s" if n_res != 1 else ""),
     unsafe_allow_html=True,
 )
 
-# KPI strip
-k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("Results",        "{:,}".format(len(results)))
-k2.metric("Brands",         str(results["Brand"].nunique()) if len(results) else "0")
-k3.metric("Body Styles",    str(results["Body"].nunique())  if len(results) else "0")
-
-if len(results) and "CO2 (g/km)" in results.columns:
-    med_co2 = results["CO2 (g/km)"].median()
-    min_co2 = results["CO2 (g/km)"].min()
-    k4.metric("Median CO\u2082",  "{:.0f} g/km".format(med_co2))
-    k5.metric("Best CO\u2082",    "{:.0f} g/km".format(min_co2))
-else:
-    k4.metric("Median CO\u2082", "—")
-    k5.metric("Best CO\u2082",   "—")
-
-st.markdown("<hr>", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# NO RESULTS
-# ══════════════════════════════════════════════════════════════════════════════
-if len(results) == 0:
+if n_res == 0:
     st.markdown(
-        "<div style='background:{card};border:1px solid {border};border-radius:12px;"
-        "padding:2rem;text-align:center;color:{muted};margin-top:1rem'>"
-        "<div style='font-size:2rem;margin-bottom:.5rem'>\u26aa</div>"
-        "<div style='font-weight:600;color:{text}'>No results found</div>"
-        "<div style='font-size:.85rem;margin-top:.4rem'>"
-        "Try adjusting your filters in the sidebar.</div>"
-        "</div>".format(card=CARD, border=BORDER, muted=MUTED, text=TEXT),
+        "<div style='background:#fff;margin:0 2rem;padding:2rem;text-align:center;"
+        "border:1px solid #ddd;border-top:none;color:#888'>"
+        "<div style='font-size:1.1rem;font-weight:600;color:#555;margin-bottom:.4rem'>"
+        "No results found</div>"
+        "Try adjusting your filters above.</div>",
         unsafe_allow_html=True,
     )
     st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SORT + COLUMN SELECTION
+# RESULTS TABLE
 # ══════════════════════════════════════════════════════════════════════════════
-DISPLAY_COLS = [c for c in [
-    "Brand", "Folder Model", "Body", "Segment",
-    "Fuel Label", "Gear Type", "Gear Count",
-    "Max Power (kW)", "Max Power (HP)",
-    "Mixed Conso (l/100km)", "CO2 (g/km)", "CO2 Class",
+# Sort controls
+with st.container():
+    sc1, sc2, sc3 = st.columns([1.2, 1, 5])
+    with sc1:
+        sort_options = {
+            "CO\u2082 (asc)":        ("CO2", True),
+            "CO\u2082 (desc)":       ("CO2", False),
+            "Brand (A\u2192Z)":      ("Brand", True),
+            "Consumption (asc)":     ("Conso Min", True),
+            "Max Power (asc)":       ("Max Power (kW)", True),
+        }
+        sort_lbl = st.selectbox("Sort by", list(sort_options.keys()), index=0, label_visibility="visible")
+    sort_col, sort_asc = sort_options[sort_lbl]
+
+# Build display table
+SHOW_COLS = [c for c in [
+    "Body", "Brand", "Model",
+    "Energy",
+    "Conso Min", "Conso Max",
+    "CO2", "CO2 Class",
     "HC (g/km)", "NOx (g/km)", "HC+NOx (g/km)", "Particles (g/km)",
-    "Mass (kg)", "Euro Norm",
+    "Euro Norm",
+    "Gearbox", "Max Power (kW)", "Mass (kg)",
 ] if c in results.columns]
 
-ctrl1, ctrl2, _ = st.columns([1.2, 1.2, 3])
-with ctrl1:
-    sort_opts = [c for c in ["CO2 (g/km)", "Brand", "Max Power (kW)", "Mixed Conso (l/100km)", "Mass (kg)"] if c in results.columns]
-    sort_col = st.selectbox("Sort by", sort_opts, index=0, label_visibility="visible")
-with ctrl2:
-    sort_dir = st.radio("Order", ["Ascending", "Descending"], horizontal=True)
+if sort_col in results.columns:
+    display = results[SHOW_COLS].sort_values(sort_col, ascending=sort_asc, na_position="last").copy()
+else:
+    display = results[SHOW_COLS].copy()
 
-results_sorted = results[DISPLAY_COLS].sort_values(
-    sort_col, ascending=(sort_dir == "Ascending"), na_position="last"
-)
+# ── Render table as HTML to get ADEME-style CO2 badge cells ──────────────────
+def _badge(cls):
+    if cls in ("?", ""): return cls
+    bg  = _cls_color(cls)
+    fg  = CLASS_FG.get(cls, "#fff")
+    # Arrow-shaped badge via CSS clip-path
+    return (
+        "<span style='display:inline-block;background:{bg};color:{fg};"
+        "font-weight:700;font-size:.75rem;padding:.15rem .55rem .15rem .4rem;"
+        "border-radius:2px;min-width:1.8rem;text-align:center'>{cls}</span>"
+    ).format(bg=bg, fg=fg, cls=cls)
+
+def _fmt(v, dec=1):
+    return "{:.{}f}".format(v, dec) if pd.notna(v) else "\u2013"
+
+def build_html_table(df_t: pd.DataFrame) -> str:
+    th = "style='background:#4a6741;color:#fff;font-size:.73rem;font-weight:600;" \
+         "padding:.45rem .5rem;text-align:center;white-space:nowrap;border:1px solid #5a7751'"
+    th2= "style='background:#5a6e36;color:#fff;font-size:.73rem;font-weight:600;" \
+         "padding:.45rem .5rem;text-align:center;white-space:nowrap;border:1px solid #6a7e46'"
+    td = "style='padding:.35rem .5rem;font-size:.78rem;border:1px solid #e8e8e8;" \
+         "vertical-align:middle;text-align:center'"
+    td_l="style='padding:.35rem .6rem;font-size:.78rem;border:1px solid #e8e8e8;" \
+         "vertical-align:middle;text-align:left'"
+
+    rows = ["<div style='margin:0 2rem;overflow-x:auto'>",
+            "<table style='width:100%;border-collapse:collapse;background:#fff'>",
+            "<thead>",
+            "<tr>",
+            "<th {th}>Body</th>".format(th=th),
+            "<th {th}>Brand / Model</th>".format(th=th),
+            "<th {th}>Energy</th>".format(th=th),
+            "<th {th} colspan='2'>Consumption<br><span style='font-weight:400;font-size:.65rem'>(l/100km)</span></th>".format(th=th),
+            "<th {th} colspan='3'>CO\u2082 (g/km)</th>".format(th=th),
+            "<th {th2}>CO</th>".format(th2=th2),
+            "<th {th2}>HC</th>".format(th2=th2),
+            "<th {th2}>NO\u2093</th>".format(th2=th2),
+            "<th {th2}>HC+NO\u2093</th>".format(th2=th2),
+            "<th {th2}>Particles</th>".format(th2=th2),
+            "<th {th}>Euro</th>".format(th=th),
+            "</tr>",
+            "<tr style='background:#3a5731'>",
+            "<th {th}></th>".format(th=th),
+            "<th {th}></th>".format(th=th),
+            "<th {th}></th>".format(th=th),
+            "<th {th}>Min.</th>".format(th=th),
+            "<th {th}>Max.</th>".format(th=th),
+            "<th {th}>Min. g/km</th>".format(th=th),
+            "<th {th}>Max. g/km</th>".format(th=th),
+            "<th {th}>Class</th>".format(th=th),
+            "<th {th2}></th>".format(th2=th2),
+            "<th {th2}></th>".format(th2=th2),
+            "<th {th2}></th>".format(th2=th2),
+            "<th {th2}></th>".format(th2=th2),
+            "<th {th2}></th>".format(th2=th2),
+            "<th {th}></th>".format(th=th),
+            "</tr>",
+            "</thead><tbody>",
+    ]
+
+    for i, (_, r) in enumerate(df_t.iterrows()):
+        row_bg = "#fff" if i % 2 == 0 else "#f7f7f5"
+        tr = "<tr style='background:{bg}'>".format(bg=row_bg)
+        rows.append(tr)
+
+        body   = r.get("Body", "\u2013") or "\u2013"
+        brand  = r.get("Brand", "\u2013") or "\u2013"
+        model  = r.get("Model", "\u2013") or "\u2013"
+        energy = r.get("Energy", "\u2013") or "\u2013"
+        cmin   = _fmt(r.get("Conso Min"))
+        cmax   = _fmt(r.get("Conso Max"))
+        co2v   = r.get("CO2")
+        co2min = _fmt(co2v)
+        co2max = _fmt(co2v)     # same value in 2013 dataset
+        cls    = r.get("CO2 Class", "?")
+        badge  = _badge(cls)
+
+        rows += [
+            "<td {td}><span style='font-size:.72rem;color:#555'>{v}</span></td>".format(td=td, v=body),
+            "<td {td}><span style='font-weight:700;font-size:.8rem'>{br}</span><br>"
+            "<span style='font-size:.72rem;color:#555'>{mo}</span></td>".format(td=td_l, br=brand, mo=model),
+            "<td {td}><span style='font-size:.72rem'>{v}</span></td>".format(td=td, v=energy),
+            "<td {td}>{v}</td>".format(td=td, v=cmin),
+            "<td {td}>{v}</td>".format(td=td, v=cmax),
+            "<td {td}>{v}</td>".format(td=td, v=co2min),
+            "<td {td}>{v}</td>".format(td=td, v=co2max),
+            "<td {td}>{v}</td>".format(td=td, v=badge),
+        ]
+        for col in ("CO (g/km)","HC (g/km)","NOx (g/km)","HC+NOx (g/km)","Particles (g/km)"):
+            v = _fmt(r.get(col), 4) if col != "CO (g/km)" else _fmt(r.get(col), 3)
+            rows.append("<td {td}>{v}</td>".format(td=td, v=v))
+
+        norm = str(r.get("Euro Norm","")) or "\u2013"
+        rows.append("<td {td}><span style='font-size:.72rem'>{v}</span></td>".format(td=td, v=norm))
+        rows.append("</tr>")
+
+    rows += ["</tbody></table></div>"]
+    return "\n".join(rows)
+
+PAGE_SIZE = 50
+if "tbl_page" not in st.session_state:
+    st.session_state["tbl_page"] = 0
+
+total_pages = max(1, (len(display) - 1) // PAGE_SIZE + 1)
+page = st.session_state["tbl_page"]
+page = max(0, min(page, total_pages - 1))
+
+page_df = display.iloc[page * PAGE_SIZE : (page + 1) * PAGE_SIZE]
+
+# Pagination controls
+pag1, pag2, pag3 = st.columns([1, 2, 1])
+with pag1:
+    if st.button("\u2190 Previous", disabled=(page == 0)):
+        st.session_state["tbl_page"] = page - 1
+        st.rerun()
+with pag2:
+    st.markdown(
+        "<div style='text-align:center;font-size:.78rem;color:#666;padding:.5rem 0'>"
+        "Page {cur} of {tot} \u00b7 showing {a}\u2013{b} of {n:,} results</div>".format(
+            cur=page+1, tot=total_pages,
+            a=page*PAGE_SIZE+1, b=min((page+1)*PAGE_SIZE, n_res), n=n_res,
+        ), unsafe_allow_html=True,
+    )
+with pag3:
+    if st.button("Next \u2192", disabled=(page >= total_pages - 1)):
+        st.session_state["tbl_page"] = page + 1
+        st.rerun()
+
+st.markdown(build_html_table(page_df), unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# RESULTS TABLE  with CO2 Class badge column
+# COMPARE  (up to 3 vehicles)
 # ══════════════════════════════════════════════════════════════════════════════
-st.markdown(
-    "<div style='font-size:.7rem;font-weight:600;color:{muted};"
-    "text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem'>"
-    "{n:,} result{s} \u00b7 sorted by {col} ({dir})</div>".format(
-        muted=MUTED, n=len(results_sorted), col=sort_col,
-        dir=sort_dir.lower(), s="s" if len(results_sorted) != 1 else "",
-    ),
-    unsafe_allow_html=True,
-)
+st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+with st.expander("\u21c6  Compare vehicles (up to 3)", expanded=False):
+    id_labels = (
+        display["Brand"].fillna("") + " " +
+        display["Model"].fillna("") + " \u2014 " +
+        display.get("Energy", pd.Series([""] * len(display))).fillna("")
+    ).tolist()
+    # deduplicate labels
+    seen, unique_labels = {}, []
+    for lbl in id_labels:
+        key = lbl
+        cnt = seen.get(key, 0)
+        seen[key] = cnt + 1
+        unique_labels.append(lbl if cnt == 0 else "{} ({})".format(lbl, cnt+1))
+    display = display.copy()
+    display["_label"] = unique_labels
 
-# Style numeric columns and highlight CO2 class
-num_cols = [c for c in ["CO2 (g/km)", "Max Power (kW)", "Max Power (HP)",
-                         "Mixed Conso (l/100km)", "Mass (kg)",
-                         "HC (g/km)", "NOx (g/km)", "Particles (g/km)"] if c in results_sorted.columns]
+    cmp_sel = st.multiselect(
+        "Select vehicles to compare",
+        options=unique_labels, default=[], max_selections=3,
+        placeholder="Choose up to 3 vehicles\u2026",
+    )
+    if cmp_sel:
+        cmp_rows = display[display["_label"].isin(cmp_sel)].drop(columns=["_label"])
+        cols_cmp = st.columns(len(cmp_rows))
+        for col_ui, (_, r) in zip(cols_cmp, cmp_rows.iterrows()):
+            co2v  = r.get("CO2")
+            cls   = r.get("CO2 Class","?")
+            bg    = _cls_color(cls)
+            fg    = CLASS_FG.get(cls,"#fff")
+            conso = r.get("Conso Min")
+            pw    = r.get("Max Power (kW)")
+            mass  = r.get("Mass (kg)")
 
-styled = results_sorted.style.format(
-    {c: "{:.1f}" for c in num_cols if c != "Max Power (HP)"},
-    na_rep="\u2013"
-)
+            def fv(v, d=1, u=""):
+                return "{:.{}f}{}".format(v,d,u) if pd.notna(v) else "\u2013"
 
-def _co2_bg(val):
-    cls = co2_class(val)
-    bg  = CLASS_COLOR.get(cls, "transparent")
-    fg  = CLASS_TEXT.get(cls, "#111")
-    return "background-color: {}; color: {}; font-weight: 600; border-radius: 4px".format(bg, fg)
-
-if "CO2 (g/km)" in results_sorted.columns:
-    styled = styled.applymap(_co2_bg, subset=["CO2 (g/km)"])
-
-st.dataframe(styled, use_container_width=True, hide_index=True, height=480)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# COMPARE PANEL
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown("## Compare Vehicles")
-st.caption("Select up to 3 vehicles to compare side-by-side. Identified by Brand + Model + Fuel.")
-
-# Build unique identifier label for each row
-id_col = results_sorted.apply(
-    lambda r: "{} {} \u2014 {}".format(r["Brand"], r.get("Folder Model", ""), r.get("Fuel Label", "")),
-    axis=1,
-)
-results_sorted = results_sorted.copy()
-results_sorted["_id"] = id_col.values
-
-options = results_sorted["_id"].unique().tolist()
-compare_sel = st.multiselect(
-    "Select vehicles",
-    options=options,
-    default=[],
-    max_selections=3,
-    placeholder="Choose up to 3 vehicles\u2026",
-)
-
-if compare_sel:
-    compare_rows = results_sorted[results_sorted["_id"].isin(compare_sel)].drop(columns=["_id"])
-    compare_rows = compare_rows.drop_duplicates(subset=["Brand", "Folder Model", "Fuel Label"] if "Fuel Label" in compare_rows.columns else ["Brand", "Folder Model"])
-
-    # --- CO₂ Label cards ---
-    cols_cmp = st.columns(len(compare_rows))
-    for col_ui, (_, row) in zip(cols_cmp, compare_rows.iterrows()):
-        co2_val  = row.get("CO2 (g/km)", float("nan"))
-        cls      = co2_class(co2_val)
-        bg       = CLASS_COLOR.get(cls, CARD)
-        fg       = CLASS_TEXT.get(cls,  TEXT)
-        conso    = row.get("Mixed Conso (l/100km)", float("nan"))
-        power_kw = row.get("Max Power (kW)", float("nan"))
-        power_hp = row.get("Max Power (HP)", float("nan"))
-        mass     = row.get("Mass (kg)", float("nan"))
-        norm     = row.get("Euro Norm", "\u2013")
-
-        def _fmt(v, dec=1, unit=""):
-            return "{:.{}f}{}".format(v, dec, unit) if pd.notna(v) else "\u2013"
-
-        col_ui.markdown(
-            # header: brand + model
-            "<div style='background:{card};border:1px solid {border};border-radius:14px;overflow:hidden'>"
-            # CO2 label banner
-            "<div style='background:{bg};padding:1.25rem 1rem;text-align:center'>"
-            "<div style='font-size:.6rem;font-weight:700;color:{fg};text-transform:uppercase;"
-            "letter-spacing:.14em;opacity:.8'>CO\u2082 Emission Class</div>"
-            "<div style='font-size:4rem;font-weight:900;color:{fg};line-height:1;margin:.2rem 0'>{cls}</div>"
-            "<div style='font-size:1.4rem;font-weight:700;color:{fg}'>{co2} g/km</div>"
-            "</div>"
-            # specs
-            "<div style='padding:1rem 1.1rem'>"
-            "<div style='font-size:.75rem;font-weight:700;color:{text};margin-bottom:.6rem'>"
-            "{brand}<br><span style='font-weight:500;color:{muted}'>{model}</span></div>"
-            "<table style='width:100%;border-collapse:collapse;font-size:.78rem'>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Fuel</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{fuel}</td></tr>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Consumption</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{conso}</td></tr>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Power</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{power}</td></tr>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Mass</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{mass}</td></tr>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Gearbox</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{gear}</td></tr>"
-            "<tr><td style='color:{muted};padding:.2rem 0'>Euro Norm</td>"
-            "<td style='color:{text};font-weight:500;text-align:right'>{norm}</td></tr>"
-            "</table></div></div>".format(
-                card=CARD, border=BORDER, bg=bg, fg=fg, text=TEXT, muted=MUTED,
-                cls=cls,
-                co2=_fmt(co2_val),
-                brand=row.get("Brand", "\u2013"),
-                model=row.get("Folder Model", "\u2013"),
-                fuel=row.get("Fuel Label", "\u2013"),
-                conso=_fmt(conso, 1, " l/100km") if pd.notna(conso) else "\u2013",
-                power="{} kW / {} HP".format(_fmt(power_kw, 0), _fmt(power_hp, 0)) if pd.notna(power_kw) else "\u2013",
-                mass=_fmt(mass, 0, " kg"),
-                gear="{} {}".format(row.get("Gear Type", ""), row.get("Gear Count", "")).strip() if "Gear Type" in row else "\u2013",
-                norm=str(norm),
-            ),
-            unsafe_allow_html=True,
-        )
-
-    # --- Pollutants comparison bar chart ---
-    poll_cols = [c for c in ("HC (g/km)", "NOx (g/km)", "HC+NOx (g/km)", "Particles (g/km)") if c in compare_rows.columns]
-    if poll_cols:
-        st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)
-        with st.expander("Pollutant details"):
-            poll_data = compare_rows[["Brand", "Folder Model"] + poll_cols].copy()
-            poll_data["Vehicle"] = poll_data["Brand"] + " " + poll_data["Folder Model"]
-            poll_data = poll_data.drop(columns=["Brand","Folder Model"]).set_index("Vehicle")
-            st.dataframe(
-                poll_data.style.format("{:.4f}", na_rep="\u2013")
-                .background_gradient(cmap="RdYlGn_r", axis=None),
-                use_container_width=True,
+            col_ui.markdown(
+                "<div style='border:1px solid #ddd;border-radius:4px;overflow:hidden'>"
+                "<div style='background:{bg};padding:1.2rem 1rem;text-align:center'>"
+                "<div style='font-size:.6rem;font-weight:700;color:{fg};text-transform:uppercase;"
+                "letter-spacing:.12em;opacity:.85'>CO\u2082 Class</div>"
+                "<div style='font-size:4rem;font-weight:900;color:{fg};line-height:1'>{cls}</div>"
+                "<div style='font-size:1.3rem;font-weight:700;color:{fg}'>{co2} g/km</div>"
+                "</div>"
+                "<div style='background:#fff;padding:.9rem 1rem'>"
+                "<div style='font-size:.85rem;font-weight:700;color:#1a5276'>{brand}</div>"
+                "<div style='font-size:.78rem;color:#555;margin-bottom:.6rem'>{model}</div>"
+                "<table style='width:100%;font-size:.76rem;border-collapse:collapse'>"
+                "<tr><td style='color:#888;padding:.18rem 0'>Energy</td>"
+                "<td style='font-weight:600;text-align:right'>{energy}</td></tr>"
+                "<tr><td style='color:#888;padding:.18rem 0'>Consumption</td>"
+                "<td style='font-weight:600;text-align:right'>{conso}</td></tr>"
+                "<tr><td style='color:#888;padding:.18rem 0'>Max Power</td>"
+                "<td style='font-weight:600;text-align:right'>{pw}</td></tr>"
+                "<tr><td style='color:#888;padding:.18rem 0'>Mass</td>"
+                "<td style='font-weight:600;text-align:right'>{mass}</td></tr>"
+                "<tr><td style='color:#888;padding:.18rem 0'>Gearbox</td>"
+                "<td style='font-weight:600;text-align:right'>{gear}</td></tr>"
+                "</table></div></div>".format(
+                    bg=bg, fg=fg, cls=cls,
+                    co2=fv(co2v),
+                    brand=r.get("Brand","\u2013"),
+                    model=r.get("Model","\u2013"),
+                    energy=r.get("Energy","\u2013"),
+                    conso=fv(conso, 1, " l/100km"),
+                    pw=fv(pw, 0, " kW"),
+                    mass=fv(mass, 0, " kg"),
+                    gear=r.get("Gearbox","\u2013"),
+                ),
+                unsafe_allow_html=True,
             )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CO₂ DISTRIBUTION CHART
-# ══════════════════════════════════════════════════════════════════════════════
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown("## CO\u2082 Distribution in Results")
-
-if "CO2 (g/km)" in results.columns:
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-
-    plt.rcParams.update({
-        "figure.facecolor": CARD, "axes.facecolor": CARD,
-        "axes.edgecolor": BORDER, "text.color": TEXT,
-        "axes.labelcolor": MUTED, "xtick.color": MUTED, "ytick.color": MUTED,
-        "axes.grid": True, "grid.color": BORDER, "grid.linewidth": 0.4,
-        "axes.spines.top": False, "axes.spines.right": False,
-        "xtick.labelsize": 8, "ytick.labelsize": 8,
-        "savefig.facecolor": CARD,
-    })
-
-    co2_vals = results["CO2 (g/km)"].dropna()
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 3.5))
-    fig.patch.set_facecolor(CARD)
-
-    # Histogram coloured by CO2 class
-    bins = np.arange(0, co2_vals.max() + 15, 10)
-    for cls, (lo, hi) in CO2_CLASSES.items():
-        band = co2_vals[(co2_vals >= lo) & (co2_vals <= hi)]
-        if len(band):
-            axes[0].hist(band, bins=bins, color=CLASS_COLOR[cls], alpha=0.9, label=cls, edgecolor=CARD, lw=0.3)
-    axes[0].axvline(co2_vals.median(), color=TEXT, lw=1.5, linestyle="--",
-                    label="Median {:.0f}".format(co2_vals.median()))
-    axes[0].set_xlabel("CO\u2082 (g/km)", fontsize=9)
-    axes[0].set_ylabel("Count", fontsize=9)
-    axes[0].set_title("CO\u2082 Distribution by Efficiency Class", fontsize=10, fontweight="600")
-    axes[0].legend(fontsize=7, ncol=4, framealpha=0.3)
-
-    # Class breakdown bar
-    class_counts = results["CO2 Class"].value_counts().reindex(["A","B","C","D","E","F","G"]).fillna(0)
-    bars = axes[1].bar(class_counts.index, class_counts.values,
-                       color=[CLASS_COLOR[c] for c in class_counts.index],
-                       edgecolor=CARD, lw=0, width=0.65)
-    for bar, (cls, cnt) in zip(bars, class_counts.items()):
-        if cnt > 0:
-            axes[1].text(bar.get_x() + bar.get_width()/2, cnt + 0.5,
-                         str(int(cnt)), ha="center", va="bottom",
-                         fontsize=8, color=TEXT, fontweight="600")
-    axes[1].set_xlabel("CO\u2082 Class", fontsize=9)
-    axes[1].set_ylabel("Count", fontsize=9)
-    axes[1].set_title("Breakdown by Efficiency Class", fontsize=10, fontweight="600")
-
-    plt.tight_layout(pad=0.8)
-    st.pyplot(fig, use_container_width=True)
-    plt.close()
-
-# ── Footer ──────────────────────────────────────────────────────────────────
-st.markdown("<hr>", unsafe_allow_html=True)
+# ── Footer ─────────────────────────────────────────────────────────────────────
 st.markdown(
-    "<div style='font-size:.68rem;color:{muted};display:flex;justify-content:space-between'>"
-    "<span>ADEME Car Labelling Dataset 2013 \u00b7 {:,} total vehicles</span>"
+    "<div style='background:#fff;border-top:1px solid #ddd;margin-top:2rem;"
+    "padding:.6rem 2rem;font-size:.68rem;color:#888;display:flex;"
+    "justify-content:space-between'>"
+    "<span>ADEME Car Labelling Dataset 2013 \u00b7 {:,} vehicles</span>"
     "<span><a href='https://github.com/cknogler/Vehicle-CO2-Emissions-Prediction' "
-    "style='color:{mint};text-decoration:none'>GitHub \u2197</a></span>"
-    "</div>".format(len(df), muted=MUTED, mint=MINT),
+    "style='color:#1a5276;text-decoration:none'>GitHub \u2197</a></span>"
+    "</div>".format(len(df)),
     unsafe_allow_html=True,
 )
