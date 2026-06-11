@@ -960,7 +960,6 @@ with tabs[4]:
     cluster_colors = dict(zip(cluster_order, palette_clust))
 
     st.subheader("Cluster Sizes")
-    print(df_cluster_raw['Cluster'].value_counts().sort_index())
 
     # 2x2 Dashboard (wie im Notebook)
     fleet_mean = df_cluster_raw['CO2 (g/km)'].mean()
