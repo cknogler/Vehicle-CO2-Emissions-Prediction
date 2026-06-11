@@ -694,7 +694,7 @@ with tabs[2]:
     )
 
     # ── KEY CHANGE: use df_unique instead of df ───────────────────────────────
-    df_numeric = df_unique.select_dtypes(include=np.number).copy()
+    df_numeric = df_unique.select_dtypes(include=np.number).drop(columns=["Clone_Count"], errors="ignore").copy()
     pearson_corr  = df_numeric.corr(method='pearson')
     spearman_corr = df_numeric.corr(method='spearman')
 
@@ -1664,15 +1664,11 @@ with tabs[6]:
         delta_fleet  = co2_median - fleet_median
         jahres_co2   = co2_median * 15000 / 1000
 
-        euro  = (
-    "A (≤100)" if sim_pred <= 100 else
-    "B (101–120)" if sim_pred <= 120 else
-    "C (121–140)" if sim_pred <= 140 else
-    "D (141–160)" if sim_pred <= 160 else
-    "E (161–200)" if sim_pred <= 200 else
-    "F (201–250)" if sim_pred <= 250 else
-    "G (>250)"
-)
+        euro  = ("A (≤100 g/km)" if co2_median <= 100 else
+                 "B (101–120)"   if co2_median <= 120 else
+                 "C (121–140)"   if co2_median <= 140 else
+                 "D (141–160)"   if co2_median <= 160 else
+                 "E (161–200)"   if co2_median <= 200 else "F/G (>200)")
         color = "green" if co2_median <= 120 else "orange" if co2_median <= 160 else "red"
 
         st.markdown("---")
