@@ -1327,7 +1327,16 @@ with tabs[5]:
     axes[1].set_xlabel("Maximum Power (kW)"); axes[1].set_ylabel("Predicted CO₂ (g/km)")
     axes[1].set_title("CO₂ vs. Power"); axes[1].legend(fontsize=8)
     plt.tight_layout(); st.pyplot(fig); plt.close()
-    st.caption(f"Model: Random Forest · Feature set: {best_fs} · Test MAE ≈ {results_df[results_df['Model']=='Random Forest']['Test_MAE'].iloc[0]:.1f} g/km. Ceteris paribus: all other features held constant.")
+    st.caption(
+        f"Model: Random Forest · Feature set: {best_fs} · "
+        f"Test MAE ≈ {results_df[results_df['Model']=='Random Forest']['Test_MAE'].iloc[0]:.1f} g/km. "
+        "The sensitivity curves show the isolated effect of Mass and Power on CO₂ "
+        "for the vehicle currently configured in the sliders above "
+        "(Fuel, Body, Gearbox, GearCount held constant at slider values). "
+        "Changing a categorical feature — e.g. switching Fuel from GO to ES — "
+        "shifts the entire curve, revealing how the mass/power effect differs by vehicle type. "
+        "The grey dotted line marks the dataset median as reference point."
+    )
 
 
 # ═══════════════════════ TAB 6 – CO₂-RECHNER ═════════════════════════════════
