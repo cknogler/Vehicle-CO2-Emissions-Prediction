@@ -645,13 +645,12 @@ with tabs[3]:
 
     st.caption(
         "**Interpretation:** CO\u2082 correlates most strongly with Combined Consumption "
-        "(Pearson r=0.96, Spearman r=0.98) \u2014 near-perfect linear and monotonic relationship. "
-        "Empty mass shows a strong Pearson correlation (r=0.69) and even stronger "
-        "Spearman (r=0.65) \u2014 the relationship is predominantly monotonic. "
-        "Maximum power has moderate Pearson (r=0.36) but weaker Spearman (r=0.18) "
-        "\u2014 indicates a non-linear relationship. "
-        "HC and NOX correlate negatively with CO\u2082 (r\u2248-0.17) \u2014 diesel vehicles emit "
-        "more NOX at lower CO\u2082 than petrol vehicles."
+        "(Pearson r=0.98, Spearman r=0.98) \u2014 near-perfect linear and monotonic relationship. "
+        "Empty Mass has the strongest monotonic relationship with CO\u2082 "
+        "(Pearson r=0.68, Spearman r=0.78) \u2014 Spearman notably higher than Pearson, "
+        "indicating a non-linear (diminishing) effect at high mass. "
+        "Maximum Power shows similar Pearson (r=0.67) but much weaker Spearman (r=0.54) \u2014 "
+        "the relationship is more dispersed and non-monotonic, especially at high power values."
     )
 
     st.markdown("---")
@@ -661,25 +660,29 @@ with tabs[3]:
         "Empty Mass": (
             "**Interpretation:** Strong positive correlation (Pearson r=0.68, Spearman r=0.78, R²=0.46). "
             "46% of CO₂ variance is explained by empty mass alone. "
-            "Spearman exceeds Pearson — slightly non-linear relationship: "
-            "for very heavy vehicles (>2,500 kg) the CO₂ increase per kg diminishes. "
+            "Spearman (0.78) is notably higher than Pearson (0.68) — the relationship is "
+            "non-linear with diminishing returns above ~1,600 kg: each additional kilogram "
+            "has less CO₂ impact in heavier vehicles. "
             "The hexbin shows data density at 1,200–2,000 kg / 100–220 g/km — "
             "the core market of compact and mid-range vehicles."
         ),
         "Combined Consumption": (
-            "**Interpretation:** Near-perfect linear correlation (Pearson r=0.98, R²=0.96). "
+            "**Interpretation:** Near-perfect linear correlation (Pearson r=0.98, Spearman r=0.98, R²=0.96). "
             "96% of CO₂ variance is explained by fuel consumption — physically expected, "
-            "as CO₂ is directly proportional to combustion (petrol ≈ 2.31 kg/l, diesel ≈ 2.64 kg/l). "
-            "The narrow data path in the hexbin confirms a quasi-deterministic relationship. "
+            "as CO₂ is directly proportional to combustion (petrol ≈ 2.31 kg CO₂/l, diesel ≈ 2.64 kg CO₂/l). "
+            "Pearson and Spearman are nearly identical (both 0.98) — the relationship is "
+            "quasi-deterministic and linear across the entire range. "
             "Note: Combined Consumption is deliberately excluded from the prediction model — "
-            "including it would reduce the model to a trivial conversion factor."
+            "including it would reduce the model to a trivial unit conversion."
         ),
         "Maximum Power": (
             "**Interpretation:** Moderate correlation (Pearson r=0.67, Spearman r=0.54, R²=0.45). "
-            "Pearson notably higher than Spearman — predominantly linear relationship with high scatter. "
-            "High-performance vehicles (>300 kW) span 200–550 g/km — "
-            "power alone explains CO₂ less precisely than mass, "
-            "because power is strongly correlated with mass, which is the actual physical driver."
+            "Pearson (0.67) is notably higher than Spearman (0.54) — the relationship is "
+            "predominantly linear but with high scatter, especially at high power values. "
+            "High-performance vehicles (>200 kW) span a very wide CO₂ range (150–550 g/km), "
+            "making power a weaker predictor than mass. "
+            "Mediation analysis confirms that 80% of power's effect on CO₂ is direct "
+            "(via engine displacement/fuel use), not mediated through mass."
         ),
     }
 
