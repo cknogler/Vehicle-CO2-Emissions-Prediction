@@ -36,7 +36,7 @@ This project investigates which technical vehicle characteristics explain CO₂ 
 > Which natural vehicle segments can be identified based on technical characteristics (fuel type, body style, gearbox, power, mass) in the French vehicle market 2013, and how do these segments differ in their CO₂ emissions?
 
 **Prediction**
-> What is the relative contribution of vehicle mass, engine power, fuel type, body style and gearbox type in explaining CO₂ emissions, and which minimal feature set achieves the best predictive performance?
+> What is the relative contribution of vehicle mass, engine power, fuel type, body style and gearbox type in explaining CO₂ emissions, and which technical feature set achieves the best predictive performance?
 
 ---
 
