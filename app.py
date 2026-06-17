@@ -1283,7 +1283,7 @@ with tabs[5]:
     delta_co2  = sim_pred - base_pred
     delta_col  = "#DC2626" if delta_co2 > 0 else "#059669" if delta_co2 < 0 else "#6B7280"
     box_color  = "#059669" if sim_pred <= 120 else "#D97706" if sim_pred <= 160 else "#DC2626"
-    euro_sim   = ("A (≤100)" if sim_pred<=100 else "B (101–120)" if sim_pred<=120 else "C (121–140)" if sim_pred<=140 else "D (141–160)" if sim_pred<=160 else "E (161–200)" if sim_pred<=200 else "F/G (>200)")
+    euro_sim   = ("A (≤100)" if sim_pred<=100 else "B (101–120)" if sim_pred<=120 else "C (121–140)" if sim_pred<=140 else "D (141–160)" if sim_pred<=160 else "E (161–200)" if sim_pred<=200 else "F (201–250)" if sim_pred<=250 else "G (>250)")
     with col_result:
         st.markdown("#### Predicted CO₂")
         st.markdown(f"<div style='background:{box_color}11;border-left:4px solid {box_color};padding:16px;border-radius:4px;text-align:center;'><div style='font-size:34px;font-weight:700;color:{box_color}'>{sim_pred:.1f} g/km</div><div style='font-size:13px;color:#6B7280'>{euro_sim}</div><div style='font-size:16px;color:{delta_col};margin-top:8px;font-weight:600'>{'▲' if delta_co2>0 else '▼' if delta_co2<0 else '='} {delta_co2:+.1f} g/km vs base</div></div>", unsafe_allow_html=True)
@@ -1460,7 +1460,8 @@ with tabs[6]:
                  "B (101–120)"   if co2_median <= 120 else
                  "C (121–140)"   if co2_median <= 140 else
                  "D (141–160)"   if co2_median <= 160 else
-                 "E (161–200)"   if co2_median <= 200 else "F/G (>200)")
+                 "E (161–200)"   if co2_median <= 200 else
+                 "F (201–250)"   if co2_median <= 250 else "G (>250)")
         color = "green" if co2_median <= 120 else "orange" if co2_median <= 160 else "red"
 
         st.markdown("---")
