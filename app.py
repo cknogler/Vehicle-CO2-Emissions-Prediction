@@ -1332,29 +1332,29 @@ with tabs[6]:
 
     # ── Mappings: consumer language → dataset values ─────────────────────────
     BODY_MAP = {
-        "Saloon":          "BERLINE",
-        "Estate":          "BREAK",
-        "SUV / Off-Road":  "TS TERRAINS/CHEMINS",
-        "Compact MPV":     "COMBISPACE",
-        "Van / Minibus":   "MINIBUS",
-        "Coupé":           "COUPE",
-        "Convertible":     "CABRIOLET",
-        "Minivan":         "MONOSPACE",
-        "Small Minivan":   "MONOSPACE COMPACT",
-        "City Van":        "MINISPACE",
+        "BERLINE":              "BERLINE",
+        "BREAK":                "BREAK",
+        "TS TERRAINS/CHEMINS":  "TS TERRAINS/CHEMINS",
+        "COMBISPACE":           "COMBISPACE",
+        "MINIBUS":              "MINIBUS",
+        "COUPE":                "COUPE",
+        "CABRIOLET":            "CABRIOLET",
+        "MONOSPACE":            "MONOSPACE",
+        "MONOSPACE COMPACT":    "MONOSPACE COMPACT",
+        "MINISPACE":            "MINISPACE",
     }
 
     BODY_INFO = {
-        "Saloon":         ("~135 g/km", "1,610 configs"),
-        "Estate":         ("~148 g/km", "699 configs"),
-        "SUV / Off-Road": ("~162 g/km", "552 configs"),
-        "Compact MPV":    ("~149 g/km", "258 configs"),
-        "Van / Minibus":  ("~210 g/km", "1,167 configs"),
-        "Coupé":          ("~179 g/km", "415 configs"),
-        "Convertible":    ("~160 g/km", "297 configs"),
-        "Minivan":        ("~149 g/km", "91 configs"),
-        "Small Minivan":  ("~134 g/km", "190 configs"),
-        "City Van":       ("~124 g/km", "72 configs"),
+        "BERLINE":             ("~135 g/km", "1,610 configs"),
+        "BREAK":               ("~148 g/km", "699 configs"),
+        "TS TERRAINS/CHEMINS": ("~162 g/km", "552 configs"),
+        "COMBISPACE":          ("~149 g/km", "258 configs"),
+        "MINIBUS":             ("~210 g/km", "1,167 configs"),
+        "COUPE":               ("~179 g/km", "415 configs"),
+        "CABRIOLET":           ("~160 g/km", "297 configs"),
+        "MONOSPACE":           ("~149 g/km", "91 configs"),
+        "MONOSPACE COMPACT":   ("~134 g/km", "190 configs"),
+        "MINISPACE":           ("~124 g/km", "72 configs"),
     }
 
     POWER_MAP = {
