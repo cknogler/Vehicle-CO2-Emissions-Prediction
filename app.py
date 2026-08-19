@@ -15,7 +15,7 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 from scipy import stats
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, spearmanr, mannwhitneyu
 try:
     from kmodes.kprototypes import KPrototypes
     KPROTO_AVAILABLE = True
@@ -417,6 +417,47 @@ def compute_shap_values(_rf_pipe, _X_test, sample_size: int = 500):
     shap_values = explainer.shap_values(X_sample_df)
 
     return explainer, shap_values, X_sample_df, X_sample
+
+
+def aggregate_shap_to_original_features(shap_values, feat_names, X_sample_raw,
+                                         feature_cols, cat_f, num_f, ohe):
+    """
+    Collapses one-hot-encoded SHAP columns (e.g. cat__Fuel_ES, cat__Fuel_GO)
+    back into a single SHAP value per original feature (e.g. Fuel), by summing
+    the contributions of its dummy columns. This avoids splitting one binary/
+    categorical feature's true impact across several rows in SHAP plots, which
+    otherwise reads as if two separate, redundant features were involved.
+
+    Numeric features pass through unchanged (1:1 mapping, no aggregation needed).
+    For display/coloring, categorical features use their raw category codes
+    (not the SHAP-irrelevant one-hot 0/1 flags) since the aggregated SHAP value
+    already reflects the combined effect of "which category was active".
+    """
+    feat_names = list(feat_names)
+
+    # Map each encoded column name -> its original feature name
+    col_to_orig = {}
+    for i, col in enumerate(cat_f):
+        for cat_val in ohe.categories_[i]:
+            col_to_orig[f"cat__{col}_{cat_val}"] = col
+    for col in num_f:
+        col_to_orig[f"num__{col}"] = col
+
+    shap_wide = pd.DataFrame(shap_values, columns=feat_names)
+
+    agg_shap = pd.DataFrame(index=shap_wide.index)
+    for orig_col in feature_cols:
+        matching = [c for c in feat_names if col_to_orig.get(c) == orig_col]
+        agg_shap[orig_col] = shap_wide[matching].sum(axis=1) if matching else 0.0
+
+    display_data = pd.DataFrame(index=X_sample_raw.index)
+    for col in feature_cols:
+        if col in cat_f:
+            display_data[col] = pd.Categorical(X_sample_raw[col]).codes
+        else:
+            display_data[col] = pd.to_numeric(X_sample_raw[col], errors="coerce")
+
+    return agg_shap[feature_cols], display_data[feature_cols]
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -1257,21 +1298,42 @@ with tabs[5]:
                 shap_ok = False
 
         if shap_ok:
+            # Aggregate one-hot dummy columns (e.g. cat__Fuel_ES / cat__Fuel_GO)
+            # back into a single SHAP value per original feature (e.g. Fuel),
+            # so a binary/categorical feature doesn't appear twice with mirrored values.
+            ohe = rf_pipe.named_steps["pre"].named_transformers_["cat"]
+            agg_shap_df, agg_display_df = aggregate_shap_to_original_features(
+                shap_values, X_shap_df.columns, X_shap_raw,
+                feature_cols, cat_f, num_f, ohe
+            )
+            agg_shap_values = agg_shap_df.values
+
             mean_abs_shap = pd.DataFrame({
-                "Feature": X_shap_df.columns,
-                "Mean |SHAP|": np.abs(shap_values).mean(axis=0),
+                "Feature": feature_cols,
+                "Mean |SHAP|": np.abs(agg_shap_values).mean(axis=0),
             }).sort_values("Mean |SHAP|", ascending=False)
+
+            st.caption(
+                "Note: one-hot dummy columns of the same original feature "
+                "(e.g. `cat__Fuel_ES` / `cat__Fuel_GO`) are summed back into a single "
+                "SHAP value per feature below — avoiding the redundant, mirrored rows "
+                "you'd otherwise see for binary/categorical features."
+            )
 
             # ── 4a. Global summary (beeswarm) ────────────────────────────────
             st.markdown("**Global Summary Plot (Beeswarm)**")
             st.caption(
                 "Each dot is one vehicle. Position on the x-axis shows the SHAP value "
-                "(impact on predicted CO₂, in g/km). Color shows the feature's own value "
-                "(red = high, blue = low). Features are ordered by overall impact."
+                "(impact on predicted CO₂, in g/km), aggregated per original feature. "
+                "Color shows the feature's own value — for numeric features, red = high / "
+                "blue = low; for categorical features (Fuel, Body, GearType), color reflects "
+                "the category code, so it marks *which* category was active rather than a "
+                "meaningful high/low direction. Features are ordered by overall impact."
             )
             fig_summary = plt.figure(figsize=(10, 7))
             shap.summary_plot(
-                shap_values, X_shap_df, show=False, plot_size=None, max_display=15
+                agg_shap_values, agg_display_df, feature_names=feature_cols,
+                show=False, plot_size=None, max_display=15
             )
             plt.tight_layout()
             st.pyplot(fig_summary, clear_figure=True)
@@ -1284,10 +1346,10 @@ with tabs[5]:
             ax.barh(top15_shap["Feature"], top15_shap["Mean |SHAP|"], color=BLUE, alpha=0.9)
             ax.set_xlabel("Mean |SHAP value| (g/km)"); ax.set_ylabel("Feature")
             for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
-            fig.suptitle(f"Top 15 Features by Mean |SHAP| ({best_fs})", fontsize=16)
+            fig.suptitle(f"Feature Importance by Mean |SHAP| ({best_fs})", fontsize=16)
             fig.tight_layout(rect=[0, 0, 1, 0.95]); st.pyplot(fig); plt.close()
             st.dataframe(
-                mean_abs_shap.head(15).style.format({"Mean |SHAP|": "{:.2f}"}),
+                mean_abs_shap.style.format({"Mean |SHAP|": "{:.2f}"}),
                 width='stretch'
             )
 
@@ -1307,14 +1369,15 @@ with tabs[5]:
             # ── 4c. Single-vehicle waterfall ────────────────────────────────
             st.markdown("**Single-Vehicle Explanation (Waterfall Plot)**")
             st.caption(
-                "Pick a vehicle from the sampled test set to see exactly how each feature "
-                "pushed its individual prediction up or down from the average baseline."
+                "Pick a vehicle from the sampled test set to see exactly how each original "
+                "feature pushed its individual prediction up or down from the average baseline "
+                "(one-hot dummies already aggregated back to their source feature)."
             )
             veh_idx = st.slider(
-                "Vehicle index in SHAP sample", 0, len(X_shap_df) - 1, 0, key="shap_veh_idx"
+                "Vehicle index in SHAP sample", 0, len(agg_shap_df) - 1, 0, key="shap_veh_idx"
             )
             base_val = float(np.asarray(explainer.expected_value).reshape(-1)[0])
-            pred_val = base_val + float(shap_values[veh_idx].sum())
+            pred_val = base_val + float(agg_shap_values[veh_idx].sum())
             desc_cols = [c for c in ["Brand", "Body", "Fuel", "Gearbox",
                                       "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
                                       "CO2 (g/km)"] if c in X_shap_raw.columns]
@@ -1324,10 +1387,10 @@ with tabs[5]:
                        " · ".join(f"{c}: {X_shap_raw.iloc[veh_idx][c]}" for c in desc_cols))
 
             explanation = shap.Explanation(
-                values=shap_values[veh_idx],
+                values=agg_shap_values[veh_idx],
                 base_values=base_val,
-                data=X_shap_df.iloc[veh_idx].values,
-                feature_names=X_shap_df.columns.tolist(),
+                data=agg_display_df.iloc[veh_idx].values,
+                feature_names=feature_cols,
             )
             fig_wf = plt.figure(figsize=(10, 6))
             shap.plots.waterfall(explanation, show=False, max_display=12)
@@ -1337,8 +1400,11 @@ with tabs[5]:
             st.caption(
                 f"Base value (average model output): {base_val:.1f} g/km → "
                 f"Predicted CO₂ for this vehicle: {pred_val:.1f} g/km. "
-                "Red bars push the prediction above the base value, blue bars pull it below."
+                "Red bars push the prediction above the base value, blue bars pull it below. "
+                "Categorical feature values are shown as category codes here — see the raw "
+                "feature values listed above the plot for their actual labels."
             )
+
 
     st.markdown("---")
 
@@ -1462,6 +1528,113 @@ with tabs[5]:
         "shifts the entire curve, revealing how the mass/power effect differs by vehicle type. "
         "The grey dotted line marks the dataset median as reference point."
     )
+
+    st.markdown("---")
+
+    # ── 7. Case Study: Automatic vs. Manual ──────────────────────────────────
+    st.subheader("7️⃣ Case Study: Does Automatic Transmission Increase CO₂?")
+    st.markdown(
+        "> **Research question:** Do automatic-gearbox vehicles emit more CO₂ — and "
+        "therefore consume more fuel — than manual ones? And if the raw data shows a "
+        "gap, is that a genuine gearbox effect, or simply because automatics tend to be "
+        "heavier, more powerful cars?"
+    )
+
+    if "GearType" not in df_unique.columns:
+        st.warning("GearType is not available in this dataset.")
+    else:
+        gt_data = df_unique[df_unique["GearType"].isin(["Manual", "Automatic"])].copy()
+        man_vals  = gt_data.loc[gt_data["GearType"] == "Manual",    "CO2 (g/km)"].dropna()
+        auto_vals = gt_data.loc[gt_data["GearType"] == "Automatic", "CO2 (g/km)"].dropna()
+
+        # ── A) Raw, uncontrolled comparison ───────────────────────────────
+        st.markdown("**A) Raw comparison (uncontrolled)**")
+        raw_stats = (
+            gt_data.groupby("GearType")["CO2 (g/km)"]
+            .agg(N="count", Median="median", Mean="mean", Std="std")
+            .round(1).reindex(["Manual", "Automatic"])
+        )
+        st.dataframe(raw_stats, width='stretch')
+
+        u_stat, p_val = mannwhitneyu(auto_vals, man_vals, alternative="two-sided")
+        raw_diff = auto_vals.median() - man_vals.median()
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        sns.boxplot(data=gt_data, x="GearType", y="CO2 (g/km)", order=["Manual", "Automatic"],
+                    hue="GearType", palette={"Manual": BLUE, "Automatic": ACCENT},
+                    legend=False, ax=axes[0])
+        axes[0].set_title("CO₂ by Gearbox Type (raw)")
+        sns.boxplot(data=gt_data, x="GearType", y="Empty Mass Euro Avg (kg)", order=["Manual", "Automatic"],
+                    hue="GearType", palette={"Manual": BLUE, "Automatic": ACCENT},
+                    legend=False, ax=axes[1])
+        axes[1].set_title("Vehicle Mass by Gearbox Type")
+        plt.tight_layout(); st.pyplot(fig); plt.close()
+
+        st.caption(
+            f"Raw median CO₂: Automatic {auto_vals.median():.0f} g/km vs. Manual "
+            f"{man_vals.median():.0f} g/km (Δ = {raw_diff:+.0f} g/km). Mann-Whitney U test: "
+            f"p {'< 0.001' if p_val < 0.001 else f'= {p_val:.3f}'} — the raw difference is "
+            f"statistically {'significant' if p_val < 0.05 else 'not significant'}. "
+            "But the right-hand plot shows automatic vehicles are also visibly heavier on "
+            "average — so part of this raw gap may simply reflect vehicle class, not the "
+            "gearbox mechanism itself."
+        )
+
+        # ── B) Controlled, ceteris-paribus comparison via the model ────────
+        st.markdown("**B) Controlled comparison (ceteris paribus, via the trained model)**")
+        st.markdown(
+            "For every vehicle in the SHAP test sample, the Random Forest predicts CO₂ "
+            "**twice**: once with its actual gearbox type, once with the gearbox type "
+            "flipped — mass, power, fuel type and body style held exactly constant. "
+            "The average difference isolates the **pure gearbox effect**, independent "
+            "of the confounding vehicle-class differences seen in (A)."
+        )
+        if SHAP_AVAILABLE and shap_ok and "GearType" in feature_cols:
+            cp_manual = X_shap_raw.copy(); cp_manual["GearType"] = "Manual"
+            cp_auto   = X_shap_raw.copy(); cp_auto["GearType"]   = "Automatic"
+            pred_manual = fitted["Random Forest"].predict(cp_manual[feature_cols])
+            pred_auto   = fitted["Random Forest"].predict(cp_auto[feature_cols])
+            cp_delta    = pred_auto - pred_manual
+
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.hist(cp_delta, bins=40, color=ACCENT, alpha=0.8, edgecolor="white")
+            ax.axvline(0, color="gray", lw=1.5, ls=":")
+            ax.axvline(cp_delta.mean(), color="black", lw=2, ls="--",
+                       label=f"Mean effect: {cp_delta.mean():+.1f} g/km")
+            ax.set_xlabel("Δ CO₂ (Automatic − Manual), g/km, same vehicle otherwise")
+            ax.set_ylabel("Number of vehicles")
+            ax.set_title("Ceteris-Paribus Gearbox Effect on CO₂")
+            ax.legend()
+            for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+            plt.tight_layout(); st.pyplot(fig); plt.close()
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Mean effect", f"{cp_delta.mean():+.1f} g/km")
+            c2.metric("Median effect", f"{np.median(cp_delta):+.1f} g/km")
+            c3.metric("Vehicles where Automatic is higher", f"{(cp_delta > 0).mean()*100:.0f}%")
+
+            explained_share = (
+                f"{(1 - abs(cp_delta.mean()) / abs(raw_diff)) * 100:.0f}%"
+                if raw_diff != 0 else "n/a"
+            )
+            st.success(
+                f"**Answer:** Holding mass, power, fuel type and body style constant, switching "
+                f"a vehicle from manual to automatic changes predicted CO₂ by "
+                f"**{cp_delta.mean():+.1f} g/km** on average ({(cp_delta > 0).mean()*100:.0f}% "
+                f"of vehicles predicted higher with automatic). This controlled effect is "
+                f"{'much smaller than' if abs(cp_delta.mean()) < abs(raw_diff) * 0.5 else 'comparable to'} "
+                f"the raw {raw_diff:+.0f} g/km gap from (A) — roughly {explained_share} of the raw "
+                "gap is explained away once mass and power are held fixed. In other words: "
+                "automatics in this dataset are associated with higher CO₂ mostly *because* "
+                "they tend to be heavier, more powerful vehicles — not because the gearbox "
+                "mechanism itself burns significantly more fuel for an otherwise identical car."
+            )
+        else:
+            st.info(
+                "GearType is not part of the currently selected feature set "
+                f"({best_fs}), so a controlled model-based comparison isn't available here. "
+                "The raw comparison in (A) still applies but does not control for confounders."
+            )
 
 
 # ═══════════════════════ TAB 6 – CO₂ CALCULATOR ══════════════════════════════
