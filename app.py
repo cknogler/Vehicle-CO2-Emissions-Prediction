@@ -21,6 +21,11 @@ try:
     KPROTO_AVAILABLE = True
 except ImportError:
     KPROTO_AVAILABLE = False
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.inspection import PartialDependenceDisplay
@@ -384,6 +389,34 @@ def train_all_models(_df: pd.DataFrame):
 
     return (fitted, results_df, fs_df, best_fs, feature_cols,
             X_train, X_test, y_train, y_test, rf_pipe, fi_df, num_f, cat_f)
+
+
+@st.cache_resource(show_spinner=False)
+def compute_shap_values(_rf_pipe, _X_test, sample_size: int = 500):
+    """
+    Computes SHAP values for the Random Forest pipeline using TreeExplainer.
+    Runs on the fitted ColumnTransformer output so SHAP sees the same
+    one-hot-encoded feature space as the model. A random sample is used
+    for speed on larger test sets; the sample and the resulting SHAP matrix
+    are returned together so they always stay aligned.
+    """
+    rf_pre = _rf_pipe.named_steps["pre"]
+    rf_model = _rf_pipe.named_steps["m"]
+
+    X_sample = _X_test.sample(
+        n=min(sample_size, len(_X_test)), random_state=RANDOM_STATE
+    ).reset_index(drop=True)
+
+    X_sample_transformed = rf_pre.transform(X_sample)
+    if hasattr(X_sample_transformed, "toarray"):
+        X_sample_transformed = X_sample_transformed.toarray()
+    feat_names = rf_pre.get_feature_names_out()
+    X_sample_df = pd.DataFrame(X_sample_transformed, columns=feat_names)
+
+    explainer = shap.TreeExplainer(rf_model)
+    shap_values = explainer.shap_values(X_sample_df)
+
+    return explainer, shap_values, X_sample_df, X_sample
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -1199,8 +1232,118 @@ with tabs[5]:
 
     st.markdown("---")
 
-    # ── 4. Partial Dependence Plots ──────────────────────────────────────────
-    st.subheader("4️⃣ Partial Dependence Plots – Random Forest")
+    # ── 4. SHAP Analysis ─────────────────────────────────────────────────────
+    st.subheader(f"4️⃣ SHAP Analysis – Random Forest ({best_fs})")
+    st.markdown(
+        "**Methodology:** SHAP (SHapley Additive exPlanations) decomposes every single "
+        "prediction into additive contributions from each feature, based on cooperative "
+        "game theory. Unlike Feature Importance (MDI), which only ranks features globally, "
+        "SHAP shows **direction** (does a high value push CO₂ up or down?) and **per-vehicle** "
+        "effects — computed here on a random sample of the held-out test set via "
+        "`TreeExplainer`, which is exact and fast for tree ensembles."
+    )
+
+    if not SHAP_AVAILABLE:
+        st.warning("The `shap` package is not installed. Please add `shap` to requirements.txt.")
+    else:
+        with st.spinner("Computing SHAP values (TreeExplainer on test sample) …"):
+            try:
+                explainer, shap_values, X_shap_df, X_shap_raw = compute_shap_values(
+                    rf_pipe, X_test, sample_size=500
+                )
+                shap_ok = True
+            except Exception as e:
+                st.error(f"SHAP computation failed: {e}")
+                shap_ok = False
+
+        if shap_ok:
+            mean_abs_shap = pd.DataFrame({
+                "Feature": X_shap_df.columns,
+                "Mean |SHAP|": np.abs(shap_values).mean(axis=0),
+            }).sort_values("Mean |SHAP|", ascending=False)
+
+            # ── 4a. Global summary (beeswarm) ────────────────────────────────
+            st.markdown("**Global Summary Plot (Beeswarm)**")
+            st.caption(
+                "Each dot is one vehicle. Position on the x-axis shows the SHAP value "
+                "(impact on predicted CO₂, in g/km). Color shows the feature's own value "
+                "(red = high, blue = low). Features are ordered by overall impact."
+            )
+            fig_summary = plt.figure(figsize=(10, 7))
+            shap.summary_plot(
+                shap_values, X_shap_df, show=False, plot_size=None, max_display=15
+            )
+            plt.tight_layout()
+            st.pyplot(fig_summary, clear_figure=True)
+            plt.close()
+
+            # ── 4b. Mean |SHAP| bar chart ─────────────────────────────────────
+            st.markdown("**Mean Absolute SHAP Value per Feature**")
+            top15_shap = mean_abs_shap.head(15).sort_values("Mean |SHAP|", ascending=True)
+            fig, ax = plt.subplots(figsize=(16, 7))
+            ax.barh(top15_shap["Feature"], top15_shap["Mean |SHAP|"], color=BLUE, alpha=0.9)
+            ax.set_xlabel("Mean |SHAP value| (g/km)"); ax.set_ylabel("Feature")
+            for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+            fig.suptitle(f"Top 15 Features by Mean |SHAP| ({best_fs})", fontsize=16)
+            fig.tight_layout(rect=[0, 0, 1, 0.95]); st.pyplot(fig); plt.close()
+            st.dataframe(
+                mean_abs_shap.head(15).style.format({"Mean |SHAP|": "{:.2f}"}),
+                width='stretch'
+            )
+
+            top_feat = mean_abs_shap.iloc[0]["Feature"]
+            top_val = mean_abs_shap.iloc[0]["Mean |SHAP|"]
+            st.caption(
+                f"Interpretation: `{top_feat}` has the largest average impact "
+                f"(±{top_val:.1f} g/km per prediction) on the CO₂ estimate, consistent "
+                "with mass and power dominating the MDI ranking above. Unlike MDI, the "
+                "beeswarm also shows *how* — e.g. a cluster of red (high-value) dots on the "
+                "positive side means higher values of that feature push predictions up, "
+                "not just that the feature matters."
+            )
+
+            st.markdown("---")
+
+            # ── 4c. Single-vehicle waterfall ────────────────────────────────
+            st.markdown("**Single-Vehicle Explanation (Waterfall Plot)**")
+            st.caption(
+                "Pick a vehicle from the sampled test set to see exactly how each feature "
+                "pushed its individual prediction up or down from the average baseline."
+            )
+            veh_idx = st.slider(
+                "Vehicle index in SHAP sample", 0, len(X_shap_df) - 1, 0, key="shap_veh_idx"
+            )
+            base_val = float(np.asarray(explainer.expected_value).reshape(-1)[0])
+            pred_val = base_val + float(shap_values[veh_idx].sum())
+            desc_cols = [c for c in ["Brand", "Body", "Fuel", "Gearbox",
+                                      "Maximum Power (kW)", "Empty Mass Euro Avg (kg)",
+                                      "CO2 (g/km)"] if c in X_shap_raw.columns]
+            if len(desc_cols) == 0:
+                desc_cols = X_shap_raw.columns.tolist()[:5]
+            st.caption("Selected vehicle (raw features): " +
+                       " · ".join(f"{c}: {X_shap_raw.iloc[veh_idx][c]}" for c in desc_cols))
+
+            explanation = shap.Explanation(
+                values=shap_values[veh_idx],
+                base_values=base_val,
+                data=X_shap_df.iloc[veh_idx].values,
+                feature_names=X_shap_df.columns.tolist(),
+            )
+            fig_wf = plt.figure(figsize=(10, 6))
+            shap.plots.waterfall(explanation, show=False, max_display=12)
+            plt.tight_layout()
+            st.pyplot(fig_wf, clear_figure=True)
+            plt.close()
+            st.caption(
+                f"Base value (average model output): {base_val:.1f} g/km → "
+                f"Predicted CO₂ for this vehicle: {pred_val:.1f} g/km. "
+                "Red bars push the prediction above the base value, blue bars pull it below."
+            )
+
+    st.markdown("---")
+
+    # ── 5. Partial Dependence Plots ──────────────────────────────────────────
+    st.subheader("5️⃣ Partial Dependence Plots – Random Forest")
     st.markdown(
         "PDPs show the **marginal effect** of a single feature on the predicted CO\u2082 value \u2014 "
         "all other features are held at their mean (ceteris paribus). "
@@ -1234,7 +1377,7 @@ with tabs[5]:
 
     # ── 5. What-If Simulator ─────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("5️⃣ What-If Simulator — Live Model Interaction")
+    st.subheader("6️⃣ What-If Simulator — Live Model Interaction")
     st.markdown(
         "Adjust individual vehicle features using the sliders below. "
         "The model recalculates the predicted CO₂ in **real time**, showing "
