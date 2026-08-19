@@ -1003,6 +1003,40 @@ with tabs[2]:
         "how many units were registered."
     )
 
+    # ── Automatic vs. Manual distribution ─────────────────────────────────
+    if "GearType" in df_unique.columns:
+        st.markdown("---")
+        st.subheader("Automatic vs. Manual — Distribution")
+
+        gt_dist = df_unique[df_unique["GearType"].isin(["Manual", "Automatic"])]
+        gt_counts = gt_dist["GearType"].value_counts().reindex(["Manual", "Automatic"])
+        gt_pct = (gt_counts / gt_counts.sum() * 100).round(1)
+
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+        bars = axes[0].bar(gt_counts.index, gt_counts.values,
+                            color=[BLUE, ACCENT], alpha=0.9, edgecolor="white")
+        for bar, cnt, pct in zip(bars, gt_counts.values, gt_pct.values):
+            axes[0].text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                         f"{cnt:,}\n({pct:.1f}%)", ha="center", va="bottom", fontweight="bold")
+        axes[0].set_title("Count of Unique Configurations")
+        axes[0].set_ylabel("Number of vehicles")
+        axes[0].set_ylim(0, gt_counts.max() * 1.2)
+        for sp in ["top", "right"]: axes[0].spines[sp].set_visible(False)
+
+        axes[1].pie(gt_counts.values, labels=gt_counts.index, colors=[BLUE, ACCENT],
+                    autopct="%1.1f%%", startangle=90,
+                    wedgeprops={"edgecolor": "white", "linewidth": 1.5})
+        axes[1].set_title("Share of Fleet")
+
+        plt.tight_layout(); st.pyplot(fig); plt.close()
+
+        st.caption(
+            f"Of {gt_counts.sum():,} unique ES/GO configurations, "
+            f"{gt_counts['Manual']:,} ({gt_pct['Manual']:.1f}%) use a manual gearbox and "
+            f"{gt_counts['Automatic']:,} ({gt_pct['Automatic']:.1f}%) use an automatic one — "
+            "manual gearboxes clearly dominate the 2013 French vehicle market in this dataset."
+        )
+
 
 # ═══════════════════════ TAB 4 – CLUSTERING ══════════════════════════════════
 with tabs[4]:
