@@ -932,6 +932,77 @@ with tabs[2]:
     st.subheader("Top 5 Redundant Mechanical Bases")
     st.dataframe(df_unique.head(5), width='stretch')
 
+    st.markdown("---")
+
+    # ── Fleet-wide Distribution and Frequency Analysis (Deduplicated) ────────
+    st.subheader("Fleet-wide Distribution and Frequency Analysis (Deduplicated)")
+    st.markdown(
+        "Same set of distribution and frequency plots as in the **EDA** tab, but computed "
+        "on the **deduplicated** dataset (one row per unique mechanical configuration, "
+        "n={:,}) instead of the raw {:,} records. This removes the bias toward "
+        "over-represented configurations (e.g. Mercedes-Benz Minibuses) seen in the raw "
+        "frequency counts, and lets brand/body/gearbox frequencies reflect model-level "
+        "diversity rather than registration volume.".format(len(df_unique), len(df))
+    )
+    fig, axes = plt.subplots(5, 2, figsize=(20, 30))
+    fig.suptitle('Fleet-wide Distribution and Frequency Analysis (Deduplicated)', fontsize=20, y=1.01)
+
+    sns.histplot(df_unique['Empty Mass Euro Avg (kg)'], bins=100, kde=True, ax=axes[0,0], color=BLUE)
+    axes[0,0].set_title('Distribution of Vehicle Mass (kg)', fontsize=14)
+
+    sns.histplot(df_unique['Maximum Power (kW)'], bins=100, kde=True, ax=axes[0,1], color=BLUE)
+    axes[0,1].set_title('Distribution of Maximum Power (kW)', fontsize=14)
+
+    sns.histplot(df_unique['Combined Consumption (l/100km)'].dropna(), bins=100, kde=True,
+                 ax=axes[1,0], color=BLUE)
+    axes[1,0].set_title('Combined Consumption Distribution (l/100km)', fontsize=14)
+
+    sns.histplot(df_unique['CO2 (g/km)'].dropna(), bins=100, kde=True, ax=axes[1,1], color=BLUE)
+    axes[1,1].set_title('Distribution of CO2 Emissions (g/km)', fontsize=14)
+
+    if 'Fuel' in df_unique.columns:
+        sns.countplot(data=df_unique, x='Fuel', ax=axes[2,0], color=BLUE,
+                      order=df_unique['Fuel'].value_counts().index)
+        axes[2,0].set_title('Fuel Type Frequency', fontsize=14)
+
+    if 'Body' in df_unique.columns:
+        sns.countplot(data=df_unique, x='Body', ax=axes[2,1], color=BLUE,
+                      order=df_unique['Body'].value_counts().index)
+        axes[2,1].set_title('Body Type Frequency', fontsize=14)
+        axes[2,1].tick_params(axis='x', rotation=45)
+
+    if 'Gearbox' in df_unique.columns:
+        sns.countplot(data=df_unique, x='Gearbox', ax=axes[3,0], color=BLUE,
+                      order=df_unique['Gearbox'].value_counts().index)
+        axes[3,0].set_title('Gearbox Frequency', fontsize=14)
+
+    if 'Range' in df_unique.columns:
+        sns.countplot(data=df_unique, x='Range', ax=axes[3,1], color=BLUE,
+                      order=df_unique['Range'].value_counts().index)
+        axes[3,1].set_title('Vehicle Range Frequency', fontsize=14)
+        axes[3,1].tick_params(axis='x', rotation=30)
+
+    top_brands_u = df_unique['Brand'].value_counts().nlargest(25)
+    sns.barplot(x=top_brands_u.values, y=top_brands_u.index, ax=axes[4,0], color=BLUE)
+    axes[4,0].set_title('Top 25 Brands by Frequency', fontsize=14)
+
+    # df_unique has no "Commerical Designation" column (dropped during grouping) —
+    # "Folder Model" is the closest equivalent unique-configuration identifier.
+    if 'Folder Model' in df_unique.columns:
+        top_models_u = df_unique['Folder Model'].value_counts().nlargest(15)
+        sns.barplot(x=top_models_u.values, y=top_models_u.index, ax=axes[4,1], color=BLUE)
+        axes[4,1].set_title('Top 15 Vehicle Models by Frequency', fontsize=14)
+
+    plt.tight_layout(); st.pyplot(fig); plt.close()
+
+    st.caption(
+        "Interpretation: Once duplicates are removed, brand and body-type frequencies shift "
+        "noticeably compared to the raw EDA tab — configurations that were massively "
+        "over-registered (e.g. commercial minibuses) now count only once, so the chart "
+        "better reflects how many *distinct* models each brand actually offers rather than "
+        "how many units were registered."
+    )
+
 
 # ═══════════════════════ TAB 4 – CLUSTERING ══════════════════════════════════
 with tabs[4]:
