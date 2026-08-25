@@ -1473,10 +1473,20 @@ with tabs[5]:
                 "that vehicle. Rows are ordered by overall impact."
             )
             fig_summary = plt.figure(figsize=(10, 9))
+            # Sanitize column names before they become plot tick labels — a stray
+            # "$" (or other mathtext-triggering character) in a label makes
+            # matplotlib try to parse it as LaTeX math and crash tight_layout().
+            X_shap_plot = X_shap_df.copy()
+            X_shap_plot.columns = [
+                str(c).replace("$", "USD").replace("\\", "/") for c in X_shap_plot.columns
+            ]
             shap.summary_plot(
-                shap_values, X_shap_df, show=False, plot_size=None, max_display=20
+                shap_values, X_shap_plot, show=False, plot_size=None, max_display=20
             )
-            plt.tight_layout()
+            try:
+                plt.tight_layout()
+            except Exception:
+                pass  # cosmetic spacing only — never let a layout glitch crash the app
             st.pyplot(fig_summary, clear_figure=True)
             plt.close()
 
@@ -1516,7 +1526,11 @@ with tabs[5]:
                         ax.set_ylabel("SHAP value (g/km)")
                         ax.tick_params(axis='x', rotation=45 if col == "Body" else 0)
                         for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
-                        plt.tight_layout(); st.pyplot(fig); plt.close()
+                        try:
+                            plt.tight_layout()
+                        except Exception:
+                            pass
+                        st.pyplot(fig); plt.close()
                     with col_table:
                         st.dataframe(cat_summary, width='stretch')
 
@@ -1585,7 +1599,10 @@ with tabs[5]:
             )
             fig_wf = plt.figure(figsize=(10, 6))
             shap.plots.waterfall(explanation, show=False, max_display=12)
-            plt.tight_layout()
+            try:
+                plt.tight_layout()
+            except Exception:
+                pass
             st.pyplot(fig_wf, clear_figure=True)
             plt.close()
             st.caption(
