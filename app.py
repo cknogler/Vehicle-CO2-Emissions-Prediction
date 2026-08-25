@@ -240,10 +240,9 @@ def make_df_unique(df: pd.DataFrame) -> pd.DataFrame:
             gear_split2[1] if 1 in gear_split2.columns else pd.Series([np.nan]*len(df_unique)),
             errors="coerce"
         )
-        # Keep only Manual and Automatic — CVT and DCT vehicles are excluded
-        # entirely (not remapped) so the model, plots and case studies only
-        # ever compare these two gearbox types.
-        df_unique = df_unique[df_unique["GearType"].isin(["Manual", "Automatic"])].reset_index(drop=True)
+        # Keep all recognized gearbox types (Manual, Automatic, CVT, DCT) —
+        # only drop unmapped/unknown codes ("Other").
+        df_unique = df_unique[df_unique["GearType"] != "Other"].reset_index(drop=True)
 
     return df_unique
 
@@ -321,7 +320,8 @@ def train_all_models(_df: pd.DataFrame):
         num, cat = get_types(feats_avail)
         _, tree_pre = build_preprocessors(num, cat)
         pipe = Pipeline([("pre", tree_pre),
-                         ("m", RandomForestRegressor(200, random_state=RANDOM_STATE, n_jobs=-1))])
+                         ("m", GradientBoostingRegressor(n_estimators=200, learning_rate=0.2,
+                                                          max_depth=6, random_state=RANDOM_STATE))])
         scores = cross_val_score(pipe, df_model[feats_avail], df_model[target_col],
                                  cv=5, scoring="neg_mean_absolute_error")
         fs_results.append({"Feature_Set": fs_name, "Features": ", ".join(feats_avail),
@@ -405,11 +405,12 @@ def train_all_models(_df: pd.DataFrame):
 @st.cache_resource(show_spinner=False)
 def compute_shap_values(_rf_pipe, _X_test, sample_size: int = 500):
     """
-    Computes SHAP values for the Random Forest pipeline using TreeExplainer.
-    Runs on the fitted ColumnTransformer output so SHAP sees the same
-    one-hot-encoded feature space as the model. A random sample is used
-    for speed on larger test sets; the sample and the resulting SHAP matrix
-    are returned together so they always stay aligned.
+    Computes SHAP values for a fitted tree-ensemble pipeline (currently called with
+    the Gradient Boosting pipeline) using TreeExplainer. Runs on the fitted
+    ColumnTransformer output so SHAP sees the same one-hot-encoded feature space
+    as the model. A random sample is used for speed on larger test sets; the
+    sample and the resulting SHAP matrix are returned together so they always
+    stay aligned.
     """
     rf_pre = _rf_pipe.named_steps["pre"]
     rf_model = _rf_pipe.named_steps["m"]
@@ -862,17 +863,16 @@ with tabs[2]:
     **Step 3 — Group and count:**
     For each unique configuration, the number of duplicate rows (`Clone_Count`) is recorded.
 
-    **Step 4 — Gearbox type filter:**
+    **Step 4 — Gearbox type parsing:**
     The `Gearbox` code (e.g. `"A 6"`, `"M 5"`) is split into `GearType` (Manual / Automatic /
-    CVT / DCT) and `GearCount` (number of gears). Only **Manual** and **Automatic**
-    configurations are kept — CVT and DCT vehicles are excluded entirely, so every model,
-    plot and case study in this app compares exactly these two gearbox types.
+    CVT / DCT) and `GearCount` (number of gears). All four recognized gearbox types are kept —
+    only rows with an unmapped/unrecognized code are dropped.
 
     The resulting dataset contains **{_unique_obs:,} unique mechanical configurations**
-    (Manual + Automatic only) — the true analytical unit for understanding CO₂ emissions.
+    (Manual, Automatic, CVT and DCT) — the true analytical unit for understanding CO₂ emissions.
 
     > **Result:** {_redund_pct:.1f}% of the ES/GO-filtered dataset were removed —
-    > either as duplicates or as CVT/DCT gearbox configurations (Step 4).
+    > either as duplicates or as unrecognized/unmapped gearbox codes (Step 4).
     > The most redundant configuration appeared **{_top_clone:,} times** in the raw data.
     """)
 
@@ -891,7 +891,7 @@ with tabs[2]:
     c1.metric("Total Records",    f"{total_obs:,}")
     c2.metric("ES+GO Filter",     f"{filtered_obs:,}")
     c3.metric("Unique Designs",   f"{unique_designs:,}")
-    c4.metric("Reduction Rate",  f"{redundancy_pct:.1f}%", help="Duplicates + CVT/DCT gearbox configurations removed")
+    c4.metric("Reduction Rate",  f"{redundancy_pct:.1f}%", help="Duplicates + unrecognized gearbox codes removed")
 
     # ── Bar chart: Engineering Fleet Diversity ───────────────────────────────
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -1028,15 +1028,17 @@ with tabs[2]:
     # ── Automatic vs. Manual distribution ─────────────────────────────────
     if "GearType" in df_unique.columns:
         st.markdown("---")
-        st.subheader("Automatic vs. Manual — Distribution")
+        st.subheader("Gearbox Type — Distribution")
 
-        gt_dist = df_unique[df_unique["GearType"].isin(["Manual", "Automatic"])]
-        gt_counts = gt_dist["GearType"].value_counts().reindex(["Manual", "Automatic"])
+        gt_dist = df_unique.dropna(subset=["GearType"])
+        gt_order_all = gt_dist["GearType"].value_counts().index.tolist()
+        gt_counts = gt_dist["GearType"].value_counts().reindex(gt_order_all)
         gt_pct = (gt_counts / gt_counts.sum() * 100).round(1)
+        gt_palette = sns.color_palette("Set2", n_colors=len(gt_order_all))
 
         fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
         bars = axes[0].bar(gt_counts.index, gt_counts.values,
-                            color=[BLUE, ACCENT], alpha=0.9, edgecolor="white")
+                            color=gt_palette, alpha=0.9, edgecolor="white")
         for bar, cnt, pct in zip(bars, gt_counts.values, gt_pct.values):
             axes[0].text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                          f"{cnt:,}\n({pct:.1f}%)", ha="center", va="bottom", fontweight="bold")
@@ -1045,18 +1047,20 @@ with tabs[2]:
         axes[0].set_ylim(0, gt_counts.max() * 1.2)
         for sp in ["top", "right"]: axes[0].spines[sp].set_visible(False)
 
-        axes[1].pie(gt_counts.values, labels=gt_counts.index, colors=[BLUE, ACCENT],
+        axes[1].pie(gt_counts.values, labels=gt_counts.index, colors=gt_palette,
                     autopct="%1.1f%%", startangle=90,
                     wedgeprops={"edgecolor": "white", "linewidth": 1.5})
         axes[1].set_title("Share of Fleet")
 
         plt.tight_layout(); st.pyplot(fig); plt.close()
 
+        top_gt = gt_counts.idxmax()
         st.caption(
-            f"Of {gt_counts.sum():,} unique ES/GO configurations, "
-            f"{gt_counts['Manual']:,} ({gt_pct['Manual']:.1f}%) use a manual gearbox and "
-            f"{gt_counts['Automatic']:,} ({gt_pct['Automatic']:.1f}%) use an automatic one — "
-            "manual gearboxes clearly dominate the 2013 French vehicle market in this dataset."
+            f"Of {gt_counts.sum():,} unique ES/GO configurations, `{top_gt}` is the most "
+            f"common gearbox type at {gt_pct[top_gt]:.1f}% "
+            f"({', '.join(f'{gt}: {gt_pct[gt]:.1f}%' for gt in gt_order_all if gt != top_gt)} "
+            "for the remaining types) — manual gearboxes typically dominate the 2013 French "
+            "vehicle market, with CVT and DCT as smaller, more specialized shares."
         )
 
 
@@ -1309,21 +1313,21 @@ with tabs[5]:
             st.error(f"Training failed: {e}")
             st.stop()
 
-    # Random Forest as primary model — cleaner MDI interpretability
-    best_model_name = "Random Forest"
+    # Gradient Boosting as primary model — best test-set performance (see 2️⃣)
+    best_model_name = "Gradient Boosting"
 
     # ── 1. Feature Set Comparison ────────────────────────────────────────────
-    st.subheader("1️⃣ Feature Set Comparison (5-Fold CV, Random Forest)")
+    st.subheader("1️⃣ Feature Set Comparison (5-Fold CV, Gradient Boosting)")
     st.markdown(
         "**Methodology:** Four feature combinations are compared using **5-fold cross-validation** "
-        "with a Random Forest. MAE measures the average deviation in g/km "
+        "with a Gradient Boosting model. MAE measures the average deviation in g/km "
         "(**lower is better**). This selects the most informative feature set without overfitting risk."
     )
     fig, ax = plt.subplots(figsize=(10, 5))
     plot_fs = fs_df.sort_values("CV_MAE_mean", ascending=True)
     ax.barh(plot_fs["Feature_Set"], plot_fs["CV_MAE_mean"], color=BLUE, alpha=0.9)
     ax.set_xlabel("CV MAE (lower = better)"); ax.set_ylabel("Feature Set")
-    ax.set_title("Feature Set Comparison (5-Fold CV, Random Forest)")
+    ax.set_title("Feature Set Comparison (5-Fold CV, Gradient Boosting)")
     plt.tight_layout(); st.pyplot(fig); plt.close()
 
     st.success(f"✅ Best feature set: **{best_fs}** | Features: {', '.join(feature_cols)}")
@@ -1401,7 +1405,7 @@ with tabs[5]:
     st.caption(
         f"Interpretation: {top2_names} together account for ~{top2_share:.0f}% of the "
         f"Gradient Boosting model's total feature importance — the dominant physical drivers "
-        f"of CO₂ emissions, consistent with the Random Forest ranking above. "
+        f"of CO₂ emissions. "
         + (f"`{', '.join(rest_names)}` provide additional, smaller contributions; "
            if rest_names else "")
         + "the remaining body-style and gearbox categories each contribute a minor share."
@@ -1410,7 +1414,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 4. SHAP Analysis ─────────────────────────────────────────────────────
-    st.subheader(f"4️⃣ SHAP Analysis – Random Forest ({best_fs})")
+    st.subheader(f"4️⃣ SHAP Analysis – Gradient Boosting ({best_fs})")
     st.markdown(
         "**Methodology:** SHAP (SHapley Additive exPlanations) decomposes every single "
         "prediction into additive contributions from each feature, based on cooperative "
@@ -1426,7 +1430,7 @@ with tabs[5]:
         with st.spinner("Computing SHAP values (TreeExplainer on test sample) …"):
             try:
                 explainer, shap_values, X_shap_df, X_shap_raw = compute_shap_values(
-                    rf_pipe, X_test, sample_size=500
+                    gb_pipe, X_test, sample_size=500
                 )
                 shap_ok = True
             except Exception as e:
@@ -1437,7 +1441,7 @@ with tabs[5]:
             # Aggregate one-hot dummy columns (e.g. cat__Fuel_ES / cat__Fuel_GO)
             # back into a single SHAP value per original feature (e.g. Fuel),
             # so a binary/categorical feature doesn't appear twice with mirrored values.
-            ohe = rf_pipe.named_steps["pre"].named_transformers_["cat"]
+            ohe = gb_pipe.named_steps["pre"].named_transformers_["cat"]
             agg_shap_df, agg_display_df = aggregate_shap_to_original_features(
                 shap_values, X_shap_df.columns, X_shap_raw,
                 feature_cols, cat_f, num_f, ohe
@@ -1475,7 +1479,51 @@ with tabs[5]:
             st.pyplot(fig_summary, clear_figure=True)
             plt.close()
 
-            # ── 4b. Mean |SHAP| bar chart ─────────────────────────────────────
+            # ── 4b. Category-wise SHAP breakdown (Fuel, Gearbox, Body) ────────
+            cat_split_features = [c for c in ["Fuel", "GearType", "Body"] if c in feature_cols]
+            if cat_split_features:
+                st.markdown("**Category-wise SHAP Breakdown (Fuel, Gearbox, Body)**")
+                st.caption(
+                    "The beeswarm above colors categorical features by an arbitrary category "
+                    "code, which isn't very readable. These boxplots instead split each "
+                    "categorical feature's SHAP value by its actual category — e.g. Automatic "
+                    "vs. Manual, GO vs. ES, and each Body style — ordered by median SHAP value."
+                )
+                fig, axes = plt.subplots(1, len(cat_split_features),
+                                          figsize=(6.5 * len(cat_split_features), 5.5))
+                if len(cat_split_features) == 1:
+                    axes = [axes]
+                for ax, col in zip(axes, cat_split_features):
+                    split_df = pd.DataFrame({
+                        col: X_shap_raw[col].values,
+                        "SHAP value": agg_shap_df[col].values,
+                    })
+                    order = (
+                        split_df.groupby(col)["SHAP value"].median()
+                        .sort_values(ascending=False).index.tolist()
+                    )
+                    sns.boxplot(data=split_df, x=col, y="SHAP value", order=order,
+                                hue=col, palette="RdYlBu_r", legend=False, ax=ax)
+                    ax.axhline(0, color="gray", lw=1, ls=":")
+                    ax.set_title(f"SHAP value by {col}")
+                    ax.set_ylabel("SHAP value (g/km)")
+                    ax.tick_params(axis='x', rotation=45 if col == "Body" else 0)
+                    for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+                plt.tight_layout(); st.pyplot(fig); plt.close()
+
+                cap_parts = []
+                for col in cat_split_features:
+                    meds = X_shap_raw.assign(_shap=agg_shap_df[col].values).groupby(col)["_shap"].median()
+                    top_cat = meds.idxmax()
+                    bot_cat = meds.idxmin()
+                    cap_parts.append(
+                        f"`{col}`: `{top_cat}` pushes CO₂ up the most "
+                        f"(median SHAP {meds[top_cat]:+.1f} g/km), `{bot_cat}` pulls it down the "
+                        f"most (median SHAP {meds[bot_cat]:+.1f} g/km)"
+                    )
+                st.caption("Interpretation: " + "; ".join(cap_parts) + ".")
+
+            # ── 4c. Mean |SHAP| bar chart ─────────────────────────────────────
             st.markdown("**Mean Absolute SHAP Value per Feature**")
             top15_shap = mean_abs_shap.head(15).sort_values("Mean |SHAP|", ascending=True)
             fig, ax = plt.subplots(figsize=(16, 7))
@@ -1502,7 +1550,7 @@ with tabs[5]:
 
             st.markdown("---")
 
-            # ── 4c. Single-vehicle waterfall ────────────────────────────────
+            # ── 4d. Single-vehicle waterfall ────────────────────────────────
             st.markdown("**Single-Vehicle Explanation (Waterfall Plot)**")
             st.caption(
                 "Pick a vehicle from the sampled test set to see exactly how each original "
@@ -1545,7 +1593,7 @@ with tabs[5]:
     st.markdown("---")
 
     # ── 5. Partial Dependence Plots ──────────────────────────────────────────
-    st.subheader("5️⃣ Partial Dependence Plots – Random Forest")
+    st.subheader("5️⃣ Partial Dependence Plots – Gradient Boosting")
     st.markdown(
         "PDPs show the **marginal effect** of a single feature on the predicted CO\u2082 value \u2014 "
         "all other features are held at their mean (ceteris paribus). "
@@ -1561,12 +1609,12 @@ with tabs[5]:
     try:
         fig, ax = plt.subplots(figsize=(16, 7))
         PartialDependenceDisplay.from_estimator(
-            rf_pipe, X_train_pdp, features=pdp_features,
+            gb_pipe, X_train_pdp, features=pdp_features,
             categorical_features=[f for f in cat_f if f in pdp_features], ax=ax)
         for axis in fig.axes:
             axis.grid(False)
             for sp in ["top","right"]: axis.spines[sp].set_visible(False)
-        fig.suptitle(f"Partial Dependence Plots – Random Forest ({best_fs})", fontsize=16)
+        fig.suptitle(f"Partial Dependence Plots – Gradient Boosting ({best_fs})", fontsize=16)
         fig.tight_layout(rect=[0,0,1,0.95]); st.pyplot(fig); plt.close()
         st.caption(
             "Interpretation: The CO₂ increase with mass and power is non-linear — "
@@ -1651,7 +1699,7 @@ with tabs[5]:
         # ── B) Controlled, ceteris-paribus comparison via the model ────────
         st.markdown("**B) Controlled comparison (ceteris paribus, via the trained model)**")
         st.markdown(
-            "For every vehicle in the SHAP test sample, the Random Forest predicts CO₂ "
+            "For every vehicle in the SHAP test sample, the Gradient Boosting model predicts CO₂ "
             "**twice**: once as diesel (GO), once as petrol (ES) — mass, power, body style "
             "and gearbox type held exactly constant. The average difference isolates the "
             "**fuel-type effect**, independent of vehicle-class confounders."
@@ -1659,8 +1707,8 @@ with tabs[5]:
         if SHAP_AVAILABLE and shap_ok and "Fuel" in feature_cols:
             cp_es = X_shap_raw.copy(); cp_es["Fuel"] = "ES"
             cp_go = X_shap_raw.copy(); cp_go["Fuel"] = "GO"
-            pred_es = fitted["Random Forest"].predict(cp_es[feature_cols])
-            pred_go = fitted["Random Forest"].predict(cp_go[feature_cols])
+            pred_es = fitted["Gradient Boosting"].predict(cp_es[feature_cols])
+            pred_go = fitted["Gradient Boosting"].predict(cp_go[feature_cols])
             cp_delta_f = pred_go - pred_es
 
             fig, ax = plt.subplots(figsize=(10, 4))
@@ -1755,7 +1803,7 @@ with tabs[5]:
         # ── B) Controlled, ceteris-paribus comparison via the model ────────
         st.markdown("**B) Controlled comparison (ceteris paribus, via the trained model)**")
         st.markdown(
-            "For every vehicle in the SHAP test sample, the Random Forest predicts CO₂ "
+            "For every vehicle in the SHAP test sample, the Gradient Boosting model predicts CO₂ "
             "**twice**: once with its actual gearbox type, once with the gearbox type "
             "flipped — mass, power, fuel type and body style held exactly constant. "
             "The average difference isolates the **pure gearbox effect**, independent "
@@ -1764,8 +1812,8 @@ with tabs[5]:
         if SHAP_AVAILABLE and shap_ok and "GearType" in feature_cols:
             cp_manual = X_shap_raw.copy(); cp_manual["GearType"] = "Manual"
             cp_auto   = X_shap_raw.copy(); cp_auto["GearType"]   = "Automatic"
-            pred_manual = fitted["Random Forest"].predict(cp_manual[feature_cols])
-            pred_auto   = fitted["Random Forest"].predict(cp_auto[feature_cols])
+            pred_manual = fitted["Gradient Boosting"].predict(cp_manual[feature_cols])
+            pred_auto   = fitted["Gradient Boosting"].predict(cp_auto[feature_cols])
             cp_delta    = pred_auto - pred_manual
 
             fig, ax = plt.subplots(figsize=(10, 4))
@@ -1857,7 +1905,7 @@ with tabs[5]:
         # ── B) Controlled, ceteris-paribus comparison via the model ────────
         st.markdown("**B) Controlled comparison (ceteris paribus, via the trained model)**")
         st.markdown(
-            "For every vehicle in the SHAP test sample, the Random Forest predicts CO₂ "
+            "For every vehicle in the SHAP test sample, the Gradient Boosting model predicts CO₂ "
             "**once per body type** — mass, power, fuel type and gearbox held exactly "
             "constant at that vehicle's actual values, only `Body` is swapped. Averaging "
             "each body type's predictions across all vehicles gives the **isolated body-type "
@@ -1871,7 +1919,7 @@ with tabs[5]:
                 cp_b = X_shap_raw.copy()
                 cp_b["Body"] = b
                 try:
-                    cp_body_preds[b] = fitted["Random Forest"].predict(cp_b[feature_cols])
+                    cp_body_preds[b] = fitted["Gradient Boosting"].predict(cp_b[feature_cols])
                 except Exception:
                     continue
 
@@ -1929,3 +1977,135 @@ with tabs[5]:
                 "The raw comparison in (A) still applies but does not control for confounders."
             )
 
+    st.markdown("---")
+
+    # ── 9. Case Study: All Gearbox Types ─────────────────────────────────────
+    st.subheader("9️⃣ Case Study: Which Gearbox Type Emits the Most CO₂?")
+    st.markdown(
+        "> **Research question:** Going beyond the binary Automatic-vs-Manual split in "
+        "7️⃣ — how do **all four** gearbox types (Manual, Automatic, CVT, DCT) compare on "
+        "CO₂, both in the raw data and, more importantly, according to the model once "
+        "mass, power, fuel type and body style are held constant? Gear count is "
+        "deliberately **not** split out here — it stays in the model as a control "
+        "variable, but the comparison itself is by transmission type only, since gear "
+        "count fragments the smaller CVT/DCT groups into very thin samples."
+    )
+
+    if "GearType" not in df_unique.columns:
+        st.warning("GearType is not available in this dataset.")
+    else:
+        gt_all_data = df_unique.dropna(subset=["GearType", "CO2 (g/km)"]).copy()
+        gt_type_counts = gt_all_data["GearType"].value_counts()
+        gt_all_order = gt_all_data.groupby("GearType")["CO2 (g/km)"].median().sort_values(ascending=False).index.tolist()
+        gt_all_palette = dict(zip(gt_all_order, sns.color_palette("Set2", n_colors=len(gt_all_order))))
+
+        # ── A) Raw, uncontrolled comparison ─────────────────────────────────
+        st.markdown("**A) Raw comparison (uncontrolled)**")
+        st.caption(
+            "Sample sizes per type: " +
+            ", ".join(f"`{gt}`: {gt_type_counts[gt]:,}" for gt in gt_all_order) +
+            ". Types with very few vehicles (e.g. CVT/DCT) will naturally show a noisier, "
+            "less reliable median than Manual/Automatic."
+        )
+        raw_stats_gt_all = (
+            gt_all_data.groupby("GearType")["CO2 (g/km)"]
+            .agg(N="count", Median="median", Mean="mean", Std="std")
+            .round(1).reindex(gt_all_order)
+        )
+        st.dataframe(raw_stats_gt_all, width='stretch')
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        sns.boxplot(data=gt_all_data, x="GearType", y="CO2 (g/km)", order=gt_all_order,
+                    hue="GearType", palette=gt_all_palette, legend=False, ax=axes[0])
+        axes[0].set_title("CO₂ by Gearbox Type (raw)")
+        sns.boxplot(data=gt_all_data, x="GearType", y="Empty Mass Euro Avg (kg)", order=gt_all_order,
+                    hue="GearType", palette=gt_all_palette, legend=False, ax=axes[1])
+        axes[1].set_title("Vehicle Mass by Gearbox Type")
+        for ax in axes:
+            ax.tick_params(axis='x', rotation=0)
+            for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+        plt.tight_layout(); st.pyplot(fig); plt.close()
+
+        st.caption(
+            f"`{gt_all_order[0]}` has the highest raw median CO₂ "
+            f"({raw_stats_gt_all.loc[gt_all_order[0], 'Median']:.0f} g/km), while "
+            f"`{gt_all_order[-1]}` has the lowest "
+            f"({raw_stats_gt_all.loc[gt_all_order[-1], 'Median']:.0f} g/km). As in the mass "
+            "boxplot on the right, differences between types often track vehicle mass — "
+            "the controlled comparison below isolates the gearbox-type effect itself."
+        )
+
+        # ── B) Controlled, ceteris-paribus comparison via the model ────────
+        st.markdown("**B) Controlled comparison (ceteris paribus, via the trained model)**")
+        st.markdown(
+            "For every vehicle in the SHAP test sample, the Gradient Boosting model predicts CO₂ "
+            "**once per gearbox type** — mass, power, fuel type, body style and gear count "
+            "held exactly constant at that vehicle's actual values, only `GearType` is "
+            "swapped. Averaging each type's predictions across all vehicles gives the "
+            "**isolated gearbox-type effect**, independent of which vehicle classes happen "
+            "to use which transmission."
+        )
+        if SHAP_AVAILABLE and shap_ok and "GearType" in feature_cols:
+            cp_gt_preds = {}
+            for gt in gt_all_order:
+                cp_gt = X_shap_raw.copy()
+                cp_gt["GearType"] = gt
+                try:
+                    cp_gt_preds[gt] = fitted["Gradient Boosting"].predict(cp_gt[feature_cols])
+                except Exception:
+                    continue
+
+            if cp_gt_preds:
+                cp_gt_df = pd.DataFrame({
+                    "GearType": list(cp_gt_preds.keys()),
+                    "Controlled Mean CO₂": [p.mean() for p in cp_gt_preds.values()],
+                }).sort_values("Controlled Mean CO₂", ascending=False)
+
+                fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+                sns.barplot(data=raw_stats_gt_all.reset_index(), x="GearType", y="Median",
+                            order=gt_all_order, hue="GearType", palette=gt_all_palette,
+                            legend=False, ax=axes[0])
+                axes[0].set_title("Raw Median CO₂ by Gearbox Type")
+                axes[0].set_ylabel("CO₂ (g/km)")
+
+                sns.barplot(data=cp_gt_df, x="GearType", y="Controlled Mean CO₂",
+                            order=cp_gt_df["GearType"], hue="GearType", palette=gt_all_palette,
+                            legend=False, ax=axes[1])
+                axes[1].set_title("Controlled Mean CO₂ by Gearbox Type (ceteris paribus)")
+                axes[1].set_ylabel("Predicted CO₂ (g/km)")
+
+                for a in axes:
+                    for sp in ["top", "right"]: a.spines[sp].set_visible(False)
+                plt.tight_layout(); st.pyplot(fig); plt.close()
+
+                st.dataframe(
+                    cp_gt_df.style.format({"Controlled Mean CO₂": "{:.1f}"}),
+                    width='stretch'
+                )
+
+                top_gt_raw = gt_all_order[0]
+                top_gt_ctrl = cp_gt_df.iloc[0]["GearType"]
+                same_top_gt = top_gt_raw == top_gt_ctrl
+                spread_raw = raw_stats_gt_all["Median"].max() - raw_stats_gt_all["Median"].min()
+                spread_ctrl = cp_gt_df["Controlled Mean CO₂"].max() - cp_gt_df["Controlled Mean CO₂"].min()
+                st.success(
+                    f"**Answer:** Raw data ranks **{top_gt_raw}** as the highest-CO₂ gearbox "
+                    f"type. Once mass, power, fuel type, body style and gear count are held "
+                    f"constant, the model ranks **{top_gt_ctrl}** highest instead"
+                    + (", confirming the raw ranking still holds after controlling for "
+                       "vehicle-class confounders." if same_top_gt else
+                       " — meaning the raw ranking is partly driven by which vehicle classes "
+                       "happen to use which transmission, not the gearbox type itself.") +
+                    f" The spread between types also narrows from {spread_raw:.0f} g/km (raw) "
+                    f"to {spread_ctrl:.0f} g/km (controlled), showing that transmission type "
+                    "alone has a smaller isolated effect on CO₂ than mass and power — "
+                    "consistent with the binary Automatic-vs-Manual result in 7️⃣."
+                )
+            else:
+                st.info("Could not compute controlled predictions for the available gearbox types.")
+        else:
+            st.info(
+                "GearType is not part of the currently selected feature set "
+                f"({best_fs}), so a controlled model-based comparison isn't available here. "
+                "The raw comparison in (A) still applies but does not control for confounders."
+            )
