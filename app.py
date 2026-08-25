@@ -399,7 +399,7 @@ def train_all_models(_df: pd.DataFrame):
                  .sort_values("Importance", ascending=False)
 
     return (fitted, results_df, fs_df, best_fs, feature_cols,
-            X_train, X_test, y_train, y_test, rf_pipe, fi_df, num_f, cat_f, gb_fi_df)
+            X_train, X_test, y_train, y_test, rf_pipe, fi_df, num_f, cat_f, gb_fi_df, gb_pipe)
 
 
 @st.cache_resource(show_spinner=False)
@@ -1308,7 +1308,7 @@ with tabs[5]:
         try:
             (fitted, results_df, fs_df, best_fs, feature_cols,
              X_train, X_test, y_train, y_test,
-             rf_pipe, fi_df, num_f, cat_f, gb_fi_df) = train_all_models(df_unique)
+             rf_pipe, fi_df, num_f, cat_f, gb_fi_df, gb_pipe) = train_all_models(df_unique)
         except Exception as e:
             st.error(f"Training failed: {e}")
             st.stop()
@@ -1479,49 +1479,53 @@ with tabs[5]:
             st.pyplot(fig_summary, clear_figure=True)
             plt.close()
 
-            # ── 4b. Category-wise SHAP breakdown (Fuel, Gearbox, Body) ────────
+            # ── 4b. Individual SHAP analysis per categorical variable ────────
             cat_split_features = [c for c in ["Fuel", "GearType", "Body"] if c in feature_cols]
             if cat_split_features:
-                st.markdown("**Category-wise SHAP Breakdown (Fuel, Gearbox, Body)**")
+                st.markdown("**Individual SHAP Analysis per Categorical Variable**")
                 st.caption(
                     "The beeswarm above colors categorical features by an arbitrary category "
-                    "code, which isn't very readable. These boxplots instead split each "
-                    "categorical feature's SHAP value by its actual category — e.g. Automatic "
-                    "vs. Manual, GO vs. ES, and each Body style — ordered by median SHAP value."
+                    "code, which isn't very readable. Each categorical variable is therefore "
+                    "set up and analyzed separately below — its own SHAP value distribution "
+                    "per category, a summary table, and its own interpretation."
                 )
-                fig, axes = plt.subplots(1, len(cat_split_features),
-                                          figsize=(6.5 * len(cat_split_features), 5.5))
-                if len(cat_split_features) == 1:
-                    axes = [axes]
-                for ax, col in zip(axes, cat_split_features):
+                for col in cat_split_features:
+                    st.markdown(f"##### `{col}`")
+
                     split_df = pd.DataFrame({
                         col: X_shap_raw[col].values,
                         "SHAP value": agg_shap_df[col].values,
                     })
-                    order = (
-                        split_df.groupby(col)["SHAP value"].median()
-                        .sort_values(ascending=False).index.tolist()
+                    cat_summary = (
+                        split_df.groupby(col)["SHAP value"]
+                        .agg(N="count", Median="median", Mean="mean", Std="std")
+                        .round(2).sort_values("Median", ascending=False)
                     )
-                    sns.boxplot(data=split_df, x=col, y="SHAP value", order=order,
-                                hue=col, palette="RdYlBu_r", legend=False, ax=ax)
-                    ax.axhline(0, color="gray", lw=1, ls=":")
-                    ax.set_title(f"SHAP value by {col}")
-                    ax.set_ylabel("SHAP value (g/km)")
-                    ax.tick_params(axis='x', rotation=45 if col == "Body" else 0)
-                    for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
-                plt.tight_layout(); st.pyplot(fig); plt.close()
+                    order = cat_summary.index.tolist()
 
-                cap_parts = []
-                for col in cat_split_features:
-                    meds = X_shap_raw.assign(_shap=agg_shap_df[col].values).groupby(col)["_shap"].median()
-                    top_cat = meds.idxmax()
-                    bot_cat = meds.idxmin()
-                    cap_parts.append(
-                        f"`{col}`: `{top_cat}` pushes CO₂ up the most "
-                        f"(median SHAP {meds[top_cat]:+.1f} g/km), `{bot_cat}` pulls it down the "
-                        f"most (median SHAP {meds[bot_cat]:+.1f} g/km)"
+                    col_plot, col_table = st.columns([2, 1])
+                    with col_plot:
+                        fig, ax = plt.subplots(figsize=(7.5, 5))
+                        sns.boxplot(data=split_df, x=col, y="SHAP value", order=order,
+                                    hue=col, palette="RdYlBu_r", legend=False, ax=ax)
+                        ax.axhline(0, color="gray", lw=1, ls=":")
+                        ax.set_title(f"SHAP value by {col}")
+                        ax.set_ylabel("SHAP value (g/km)")
+                        ax.tick_params(axis='x', rotation=45 if col == "Body" else 0)
+                        for sp in ["top", "right"]: ax.spines[sp].set_visible(False)
+                        plt.tight_layout(); st.pyplot(fig); plt.close()
+                    with col_table:
+                        st.dataframe(cat_summary, width='stretch')
+
+                    top_cat, bot_cat = order[0], order[-1]
+                    st.caption(
+                        f"`{top_cat}` pushes CO₂ up the most on average "
+                        f"(median SHAP {cat_summary.loc[top_cat, 'Median']:+.1f} g/km, "
+                        f"n={int(cat_summary.loc[top_cat, 'N']):,}), while `{bot_cat}` pulls it "
+                        f"down the most (median SHAP {cat_summary.loc[bot_cat, 'Median']:+.1f} "
+                        f"g/km, n={int(cat_summary.loc[bot_cat, 'N']):,})."
                     )
-                st.caption("Interpretation: " + "; ".join(cap_parts) + ".")
+                    st.markdown("")
 
             # ── 4c. Mean |SHAP| bar chart ─────────────────────────────────────
             st.markdown("**Mean Absolute SHAP Value per Feature**")
