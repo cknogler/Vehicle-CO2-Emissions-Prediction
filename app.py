@@ -1464,16 +1464,17 @@ with tabs[5]:
             st.markdown("**Global Summary Plot (Beeswarm)**")
             st.caption(
                 "Each dot is one vehicle. Position on the x-axis shows the SHAP value "
-                "(impact on predicted CO₂, in g/km), aggregated per original feature. "
-                "Color shows the feature's own value — for numeric features, red = high / "
-                "blue = low; for categorical features (Fuel, Body, GearType), color reflects "
-                "the category code, so it marks *which* category was active rather than a "
-                "meaningful high/low direction. Features are ordered by overall impact."
+                "(impact on predicted CO₂, in g/km). Numeric features (mass, power, gear "
+                "count) show one row each with a meaningful color gradient (red = high / "
+                "blue = low). Categorical features are shown **unaggregated** — each "
+                "one-hot dummy column (e.g. `cat__Fuel_ES`, `cat__Fuel_GO`, "
+                "`cat__Body_MINIBUS`) appears as its own row, where color simply marks "
+                "whether that specific category was active (1, red) or not (0, blue) for "
+                "that vehicle. Rows are ordered by overall impact."
             )
-            fig_summary = plt.figure(figsize=(10, 7))
+            fig_summary = plt.figure(figsize=(10, 9))
             shap.summary_plot(
-                agg_shap_values, agg_display_df, feature_names=feature_cols,
-                show=False, plot_size=None, max_display=15
+                shap_values, X_shap_df, show=False, plot_size=None, max_display=20
             )
             plt.tight_layout()
             st.pyplot(fig_summary, clear_figure=True)
@@ -1484,10 +1485,12 @@ with tabs[5]:
             if cat_split_features:
                 st.markdown("**Individual SHAP Analysis per Categorical Variable**")
                 st.caption(
-                    "The beeswarm above colors categorical features by an arbitrary category "
-                    "code, which isn't very readable. Each categorical variable is therefore "
-                    "set up and analyzed separately below — its own SHAP value distribution "
-                    "per category, a summary table, and its own interpretation."
+                    "The beeswarm above now shows each one-hot dummy column individually, "
+                    "which is complete but splits each categorical feature's total effect "
+                    "across several rows. Each categorical variable is therefore also set up "
+                    "and analyzed separately below — its aggregated SHAP value distribution "
+                    "per category (summing the dummy columns back to the original feature), "
+                    "a summary table, and its own interpretation."
                 )
                 for col in cat_split_features:
                     st.markdown(f"##### `{col}`")
